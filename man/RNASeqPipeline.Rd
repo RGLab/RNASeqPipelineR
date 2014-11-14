@@ -15,7 +15,4 @@ manner.
 \author{
 Raphael Gottardo and Greg Finak
 }
-\concept{
-Raphael Gottardo
-}
 

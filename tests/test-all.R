@@ -1,6 +1,7 @@
 #create a project
-require(SQLite)
+require(RSQLite)
 require(SRAdb)
+require(data.table)
 require(GEOquery)
 createProject("myproject",path="./tests/",load_from_immport=TRUE)
 
@@ -20,4 +21,23 @@ getSRAdb(path="tests/Utils")
 #Detect aspera location
 detectAspera()
 
-conf <- getConfig()
+#truncate for testing
+devel_truncateData(n=4)
+getConfig()[["immport_tables"]][["GSM_table"]]
+
+#download SRA files 
+downloadSRA()
+
+#annotate the pData with SRA provenance and write out to RSEM
+annotateSRA()
+
+#Convert SRA files to FASTQ
+convertSRAtoFastQ(ncores=4)
+
+#run fastQC
+runFastQC(ncores=4)
+
+#summarize FastQC results
+summarizeFastQC()
+
+buildReference(gtf_file="UCSC.gtf",fasta_file="hg38.fa",name="hg38")

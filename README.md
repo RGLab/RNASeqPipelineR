@@ -3,6 +3,19 @@ RNASeqPipelineR
 
 Streamline the processing of RNASeq data
 
+## System requirements
+You need the following R packages:
+data.table
+GEOquery
+RSQLite
+SRAdb
+
+The following command line utilities:
+SRA Toolkit (from NCBI http://www.ncbi.nlm.nih.gov/books/NBK158900/)
+ascp (Aspera scp client, distributed with Aspera Connect)
+RSEM (http://deweylab.biostat.wisc.edu/rsem/)
+bowtie2
+
 ## Development Notes
 
 Still under development.

@@ -9,8 +9,8 @@
 #' @docType package
 #' @name RNASeqPipeline
 #' @author Raphael Gottardo and Greg Finak
-#' @concept Raphael Gottardo
 #' @import data.table
+#' @import RSQLite
 #' @import GEOquery
 #' @import SRAdb
 NULL
@@ -111,6 +111,7 @@ getConfig<-function(){
 #' @export
 assignConfig<-function(name,value){
   ns<-getNamespace("RNASeqPipelineR")
+  unlockBinding(sym = "rnaseqpipeliner_configuration",ns)
   obj<-getConfig()  
   obj[[name]]<-value
   assign("rnaseqpipeliner_configuration",obj,ns)
@@ -153,7 +154,7 @@ loadImmportTables <- function(warn=-1,verbose=0){
   
   #No errors, go ahead and load the data
   #Populate a named list
-  immport_tables<-vector('list',length(immport_files))
+  immport_tables<-vector('list')
   for(i in names(immport_files)){
     immport_tables[[i]] <- fread(file.path(tabdir,immport_files[i]),verbose=FALSE)
   }
@@ -194,15 +195,15 @@ getSRAdb <- function(path=NULL){
   assignConfig("subdirs",obj)
   
   #create if necessary
-  system(paste0("mkdir -p ",path))  
+  system(paste0("mkdir -p ",file.path(path,"SRAdb")))  
   
   #download SRA db if necessary
-  if(!file.exists(file.path(getConfig()[["subdirs"]]["Utils"],'SRAmetadb.sqlite'))) {
-    sqlfile <- getSRAdbFile(destdir = getConfig()[["subdirs"]]["Utils"])
+  if(!file.exists(file.path(getConfig()[["subdirs"]]["Utils"],"SRAdb",'SRAmetadb.sqlite'))) {
+    sqlfile <- getSRAdbFile(destdir = file.path(getConfig()[["subdirs"]]["Utils"],"SRAdb"))
   }
   
   #connect and grab the data
-  sra_con <- dbConnect(SQLite(),file.path(getConfig()[["subdirs"]]["Utils"],'SRAmetadb.sqlite'))
+  sra_con <- dbConnect(SQLite(),file.path(getConfig()[["subdirs"]]["Utils"],"SRAdb",'SRAmetadb.sqlite'))
   sra_tables <- dbListTables(sra_con)
   assignConfig("sra_tables",sra_tables)
   assignConfig("sra_con",sra_con)
@@ -223,12 +224,13 @@ detectAspera<-function(path=NULL){
     homedir<-Sys.getenv("HOME")
     if(file.exists(file.path(homedir,"Applications/Aspera Connect.app"))){
       path <- file.path(homedir,"Applications/Aspera Connect.app","Contents","Resources")
-  }
-  else if(file.exists(file.path("/Applications/Aspera Connect.app/Contents/Resources"))){
-    path <- file.path("/Applications/Aspera Connect.app/Contents/Resources")
-  }else{
-    stop("Can't detect aspera installation for Mac OS. Pass a path variable to configure.")
-  }
+    }
+    else if(file.exists(file.path("/Applications/Aspera Connect.app/Contents/Resources"))){
+      path <- file.path("/Applications/Aspera Connect.app/Contents/Resources")
+    }else{
+      stop("Can't detect aspera installation for Mac OS. Pass a path variable to configure.")
+    }
+    message("aspera detected at ", path)
     aspera_path=path
     assignConfig("aspera_path",aspera_path)
   }
@@ -242,11 +244,13 @@ detectAspera<-function(path=NULL){
 #' If the files are already present, they will not be downloaded.
 #' 
 #' @export
-downloadFastQ <- function(){
-  cond_eval <- length(list.files("./SRA/", pattern=".sra"))==0
+downloadSRA <- function(){
+  n = nrow(getConfig()[["immport_tables"]][["GSM_table"]])
+  cond_eval <- length(list.files(getConfig()[["subdirs"]][["SRA"]], pattern=".sra")) < n
   
-  if(!cond_eval){
+  if(cond_eval){
     GSM_table<-getConfig()[["immport_tables"]][["GSM_table"]]
+    successes<-0
     for(file in GSM_table[,GSM]) {
       gd <- getGEO(file, destdir=getConfig()[["subdirs"]][["GEO"]])
       SRX_number <- gsub(".*=SRX", "SRX", gd@header$relation[1])
@@ -256,7 +260,196 @@ downloadFastQ <- function(){
       run_accession <- listSRAfile(SRX_number, sra_con, fileType = "sra" )$run
       aspera_url <- paste0("anonftp@ftp.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra", "/", substr(run_accession,1,3), "/", substr(run_accession,1,6), "/", run_accession, "/", run_accession, ".sra")
       
-      system(paste0('ascp -i ',gsub(" ","\\\\ ",getConfig()[["aspera_path"]]),'/asperaweb_id_dsa.openssh -k 1 -T -l200m ', aspera_url, " ",getConfig()[["subdirs"]][["SRA"]]))
+      out<-system(paste0('ascp -i ',gsub(" ","\\\\ ",getConfig()[["aspera_path"]]),'/asperaweb_id_dsa.openssh -k 1 -T -l200m ', aspera_url, " ",getConfig()[["subdirs"]][["SRA"]]))
+      if(out==0)
+        successes<-successes+1
     }
+    message("Downloaded ", successes, " files")
   }
+}
+
+#' Utility function to truncate the test data to `n` SRA files for testing
+#' 
+#' This will truncate the GSM_table to `n` files for testing purposes.
+#' 
+#' Since there is over 100Gb of data, we truncate to n (default 2) files for testing.
+#' @param n \code{integer} the number of files to limit
+#' @export
+devel_truncateData <- function(n=2){
+  obj <- getConfig()
+  #Truncate to download only two files
+  immport_tables <- obj[["immport_tables"]]
+  immport_tables[["GSM_table"]] <- immport_tables[["GSM_table"]][1:n,]
+  assignConfig("immport_tables",immport_tables)
+  message("Truncating data to first ", n, " SRA files.")
+  invisible(NULL)
+}
+
+#' Annotate the SRA file pData
+#' 
+#' Set the pData to reflect the downloaded SRA files
+#' 
+#' @export
+annotateSRA <- function(){
+  pData<-getConfig()[["immport_tables"]][["pData"]]
+  GSM_table<-getConfig()[["immport_tables"]][["GSM_table"]]
+  pData<-pData[gsm%in%GSM_table[,GSM]]
+  SRX_number<-pData[gsm%in%GSM_table[,GSM]][,gsm]
+  #SRX_number <- pData[,gsm]
+  for(file in pData[,gsm]) {
+    gd <- getGEO(file, destdir=getConfig()[["subdirs"]][["GEO"]])
+    number <- gsub(".*=SRX", "SRX", gd@header$relation[1]) 
+    run_accession <- listSRAfile(number, getConfig()[["sra_con"]], fileType = "sra" )$run
+    SRX_number[SRX_number==file] <- run_accession
+  }
+  pData$srr <- SRX_number
+  
+  pData[,c("expsample_accession","experiment_accession","arm_accession"):=NULL]
+  setnames(pData, c("name", "ethnicity"), c("arm_name", "race"))
+  setcolorder(pData, neworder = c("subject_accession", "age_reported", "gender", "race", "study_time_collected", "study_time_collected_unit", "arm_name", "gsm", "srr","biosample_accession"))
+  write.csv(pData, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_pdata.csv"), row.names=FALSE) 
+  
+  #save the changes
+  immport_tables<-getConfig()[["immport_tables"]]
+  immport_tables[["pData"]] <- pData
+  immport_tables[["GSM_table"]] <- GSM_table
+  assignConfig("immport_tables",immport_tables)
+  message("Wrote pData to RSEM directory")
+}
+
+#' Overview of downloaded files
+#' 
+#' Prints an overview of the SRA files
+#' 
+#' Generates a table of the downloaded files for an overview to be included
+#' in reports.
+#' @export
+#' @importFrom knitr kable
+SRAOverview <- function(){
+  pData <- getConfig()[["immport_tables"]][["pData"]]
+  kable(head(pData), format = "markdown")
+}
+
+#' Convert SRA files to FastQ
+#' 
+#' Uses CLI SRA Toolkit to convert SRA files to FastQ if they don't already exist.
+#' 
+#' Converts SRA files to FastQ using the SRA Toolkit. The function checks whether the FastQ files exist, and if not, performs the conversion.
+#' @export
+#' @param ncores \code{integer} how many threads to use
+convertSRAtoFastQ <- function(ncores=8){
+  convertFastQ <- length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))<length(list.files(getConfig()[["subdirs"]][["SRA"]]))
+  convert_command <-  paste0("parallel -j ",ncores," fastq-dump {} -O ",getConfig()[["subdirs"]][["FASTQ"]]," ::: ", file.path(getConfig()[["subdirs"]][["SRA"]],"*.sra"))
+  if(convertFastQ){
+    out<-system(convert_command)
+    if(out==0)
+      message("Finished converting ",length(list.files(getConfig()[["subdirs"]][["SRA"]])), " files.")
+    else
+      warning("Something went wrong when converting FastQ files.")
+  }else{
+    message("FASTQ Files already present.")
+  }
+  
+}
+
+#' Perform FastQC quality control
+#' 
+#' Runs fastqc quality control on the FASTQ files
+#' 
+#' Produces FASTQC reports for each FASTQ file using fastqc
+#' @export
+#' @param ncores \code{integer} how many threads to use
+runFastQC <- function(ncores=8){
+  fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
+  run_command <-  paste0("parallel -j ", ncores," fastqc {} -o ",getConfig()[["subdirs"]][["FASTQC"]]," -q ::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"*.fastq"))                             
+  if(fastQCL){
+    out<-system(run_command)
+    if(out==0){
+      message("Finished fastqc process for ",length(list.files(getConfig()[["subdirs"]][["FASTQ"]])), " files.")
+      message("Expanding archives")
+      f<-list.files(pattern="zip$",path=getConfig()[["subdirs"]][["FASTQC"]])
+      sapply(f,function(x){
+        out<-system(paste0(paste0("cd ",getConfig()[["subdirs"]][["FASTQC"]]),"&& unzip -o ",x),intern=FALSE,ignore.stdout=TRUE,ignore.stderr=FALSE,wait=TRUE)
+      })
+      if(any(out!=0)){
+        warning("encountered an error unzipping fastqc reports")
+      }
+    }
+    else
+      warning("Something went wrong when running fastqc")
+  }else{
+    message("FASTQC already run")  
+  }
+}
+
+#' Summarize the fastQC results
+#' 
+#' Summarize the fastqc results
+#' 
+#' Function to be run after `runFastQC` that will summarize the fastQC results
+#' and generate a plot.
+#' 
+#' @export
+#' @import ggplot2
+summarizeFastQC <- function(){
+  # Put the FASTQC results together
+  # List sudirs
+  fastqc_subdirs <- grep("_fastqc", list.dirs(getConfig()[["subdirs"]][["FASTQC"]], recursive = FALSE), value=TRUE)
+  # Find reports
+  fastqc_summary_files <- sapply(fastqc_subdirs, list.files, pattern="summary.txt", full.names = TRUE)
+  
+  # Read all files and create a list of data.tables
+  fastqc_list <- lapply(fastqc_summary_files, function(x, ...){
+    y <- fread(x, header=FALSE);
+    setnames(y, colnames(y), c("result", "test", "file"))
+    return(y);})
+  
+  fastqc_data <- rbindlist(fastqc_list)
+  fastqc_data[,qresult:=ifelse(result=="FAIL",0, ifelse(result=="PASS", 1, 1/2))]
+  fastqc_data[,sum_qresult:=sum(qresult), by="file"]
+  fastqc_data <- fastqc_data[order(-sum_qresult)]
+  
+  # Let's reorder by overall fastqc score
+  fastqc_data$file <- reorder(fastqc_data$file, -fastqc_data$sum_qresult)
+  ggplot(fastqc_data, aes(x=test, y=file, fill=result))+geom_raster()+theme(axis.text.x=element_text(angle=90,hjust=1))
+  #tidy up
+  #sapply(fastqc_subdirs,function(x)system(paste0("rm -rf ",x)))
+}
+
+#' Build a reference genome
+#' 
+#' Builds a reference genome at `Utils/Reference_Genome`
+#' 
+#' You must specify the Utils path if it is not already defined, and have your genome in a folder titled
+#' `Reference_Genome`. This function will construct the reference genome using RSEM tools.
+#' The command line is the default shown in the documentation.
+#' `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
+#' If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
+#' @param path \code{character} specify the path to the Utils directory.
+#' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`
+#' @param fasta_file \code{character} the name of the fasta file, must be specified
+#' @param name \code{character} the name of the genome output.
+#' @export
+buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
+  if(is.null(fasta_file)|is.null(name))
+    stop("You must provide a fasta_file  and a genome name")
+  if(is.null(path)&inherits(try(getConfig()[["subdirs"]][["Utils"]]),"try-error")){
+    stop("Please specify where to build the reference genome")
+  }else if(is.null(path)){
+    path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
+  }else{
+    path = file.path(path,"Reference_Genome")
+  }
+  if(gtf_file==""){
+    gtfopt<-""
+    isoforms<-""
+    isoformsOpt<-""
+  }
+  else{
+    gtfopt <- "--gtf"
+    isoforms<-"knownIsoforms.txt"
+    isoformsOpt<-"--transcript-to-gene-map"
+  }
+  command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoforms," --bowtie2 ",fasta_file," ",name," ")
+  system(command)
 }
