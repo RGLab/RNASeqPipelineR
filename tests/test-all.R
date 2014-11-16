@@ -3,11 +3,8 @@ require(RSQLite)
 require(SRAdb)
 require(data.table)
 require(GEOquery)
+require(RNASeqPipelineR)
 createProject("myproject",path="./tests/",load_from_immport=TRUE)
-
-#Should fail since we have no immport tables
-system("rm -rf ./tests/myproject/Tab/*")
-loadImmportTables()
 
 #copy the immport tables
 system("cp -r tests/Tab/* tests/myproject/Tab/")
@@ -18,12 +15,11 @@ loadImmportTables()
 #Download the SRAdb database (if necessary)
 getSRAdb(path="tests/Utils")
 
-#Detect aspera location
-detectAspera()
-
 #truncate for testing
 devel_truncateData(n=4)
-getConfig()[["immport_tables"]][["GSM_table"]]
+
+#expect 4 rows
+nrow(getConfig()[["immport_tables"]][["GSM_table"]])==4
 
 #download SRA files 
 downloadSRA()
@@ -40,4 +36,17 @@ runFastQC(ncores=4)
 #summarize FastQC results
 summarizeFastQC()
 
+#build the reference genome
 buildReference(gtf_file="UCSC.gtf",fasta_file="hg38.fa",name="hg38")
+
+#Align and compute expression counts
+RSEMCalculateExpression(ncores=4)
+
+#Assemble an expression matrix of counts and tpm and save them to output files.
+RSEMAssembleExpressionMatrix()
+
+#Annotate using bioconductor
+BioCAnnotate(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE)
+
+#output version info
+pipelineReport()

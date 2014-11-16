@@ -25,7 +25,8 @@ The function creates the directory structure required by RNASeqPipeline
 within the new project directory, including locations for fastQ files,
 fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
 must be downloaded or linked to a GEO accession. Standard locations will also be provided
-to annotate the data utilizing the Immport schema.
+to annotate the data utilizing the Immport schema. If the project exists, it will load the configuration
+if it can find it, otherwise it will proceed to re-configure the project.
 }
 \examples{
 # construct a projects skeleton in a new folder titled "myproject".

@@ -25,7 +25,8 @@ NULL
 #' within the new project directory, including locations for fastQ files, 
 #' fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
 #' must be downloaded or linked to a GEO accession. Standard locations will also be provided 
-#' to annotate the data utilizing the Immport schema.
+#' to annotate the data utilizing the Immport schema. If the project exists, it will load the configuration 
+#' if it can find it, otherwise it will proceed to re-configure the project.
 #' 
 #' @param name \code{character} The name of the project directory
 #' @param path \code{character} The path under which to construct the project
@@ -40,8 +41,15 @@ NULL
 #' createProject("myproject",path=".",load_from_immport=TRUE)
 createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport=FALSE){
   project_dir <- file.path(path,project_name)
+  if(dir.exists(normalizePath(project_dir))){
+    #load the configuration and return
+    message("Project exists, loading configuration.")
+    success<-readConfig(normalizePath(project_dir))      
+  }
+  if(success)
+    invisible()
   cmnd_prefix <- "mkdir -p "
-  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO")
+  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG")
   if(load_from_immport)
     dirs<-c(dirs,Tab="Tab")
   subdirs <- file.path(project_dir,dirs)
@@ -62,6 +70,7 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
     }
   }
   configure_project(subdirs)
+  saveConfig()
 } 
 
 #global config in package namespace
@@ -89,6 +98,8 @@ configure_project <- function(subdirectories=NULL,fromDisk=FALSE){
   }
   unlockBinding(sym = "rnaseqpipeliner_configuration",ns)
   assign("rnaseqpipeliner_configuration", obj, envir = ns)
+  #detect aspera 
+  detectAspera()
   invisible()
 }
 
@@ -200,6 +211,8 @@ getSRAdb <- function(path=NULL){
   #download SRA db if necessary
   if(!file.exists(file.path(getConfig()[["subdirs"]]["Utils"],"SRAdb",'SRAmetadb.sqlite'))) {
     sqlfile <- getSRAdbFile(destdir = file.path(getConfig()[["subdirs"]]["Utils"],"SRAdb"))
+  }else{
+    message("SRAmetadb.sqlite found")
   }
   
   #connect and grab the data
@@ -265,6 +278,8 @@ downloadSRA <- function(){
         successes<-successes+1
     }
     message("Downloaded ", successes, " files")
+  }else{
+    message("SRA files already downloaded")
   }
 }
 
@@ -438,6 +453,9 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
   }else if(is.null(path)){
     path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
   }else{
+    subdirs<-getConfig()[["subdirs"]]
+    subdirs[["Utils"]]<-path
+    assignConfig("subdirs",subdirs) #save the user-provided path
     path = file.path(path,"Reference_Genome")
   }
   if(gtf_file==""){
@@ -450,6 +468,176 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
     isoforms<-"knownIsoforms.txt"
     isoformsOpt<-"--transcript-to-gene-map"
   }
-  command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoforms," --bowtie2 ",fasta_file," ",name," ")
-  system(command)
+  #check if the reference genome has already been built
+  if(length(list.files(pattern=paste0(name,".chrlist"),path=file.path(getConfig()[["subdirs"]]["Utils"],"Reference_Genome")))==0){
+    command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoforms," --bowtie2 ",fasta_file," ",name," ")
+    system(command)
+  }else{
+    message("Reference Genome Found")
+  }
+  #set the reference genome name
+  assignConfig("reference_genome_name",name)
+}
+
+#' Use the RSEM tool to align the reads
+#' 
+#' Use the RSEM tool to align reads
+#' 
+#' Uses RSEM to align reads in FASTQ files against the reference genome.
+#' @param ncores \core{integer} specify how many cores to use
+#' @export
+RSEMCalculateExpression <- function(ncores=4){
+  rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
+  fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
+  lr <- length(list.files(path=rsem_dir,pattern=".genes.results"))
+  lq <- length(list.files(path=fastq_dir,pattern=".fastq"))
+  reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
+  reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
+  if(lr!=lq){
+    command <- paste0("cd ",rsem_dir," && parallel -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",file.path(fastq_dir,"*.fastq"))
+    system(command)
+  }else{
+    message("Expression already calculated")
+  }
+  
+}
+
+#' Assemble an expression matrix of all results
+#' 
+#' Put all the counts from the individual libraries into a single matrix result
+#' 
+#' Assemble an expression matrix from the individual libraries.
+#'@export 
+RSEMAssembleExpressionMatrix <- function(){
+  cond_eval <- length(list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="rsem_"))<4
+  if(cond_eval){
+    message("Assembling counts matrix")
+    rsem_files <- list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="genes.results", full.names = TRUE)
+    # Read all files and create a list of data.tables
+    rsem_list <- lapply(rsem_files, function(x, ...){
+      y<-fread(x, drop=c("length", "effective_length", "FPKM")); 
+      y$sample_name <- gsub(".genes.results", "", basename(x));
+      return(y);})
+    
+    # Bind all the data.tables to create a long data.table
+    rsem_data_long <- rbindlist(rsem_list)
+    
+    # Rename a column, so that it's a bit R friendly
+    setnames(rsem_data_long, "transcript_id(s)", "transcript_ids")
+    
+    # Reshape the long data.table to create a matrix
+    # Assume that missing entries would have a TPM value of 0
+    rsem_tpm_matrix <- dcast.data.table(rsem_data_long, gene_id+transcript_ids~sample_name, value.var = "TPM", fill=0)
+    rsem_count_matrix <- dcast.data.table(rsem_data_long, gene_id+transcript_ids~sample_name, value.var = "expected_count", fill=0)
+    
+    # Keep track of the gene_id - transcript mapping 
+    rsem_txs_table <- rsem_tpm_matrix[, c("gene_id","transcript_ids"), with=FALSE]
+    
+    # Remove the transcript column (we create an annotation table in the next chunk)
+    rsem_tpm_matrix <- rsem_tpm_matrix[, transcript_ids:=NULL][order(gene_id)]
+    rsem_count_matrix <- rsem_count_matrix[, transcript_ids:=NULL][order(gene_id)]
+    
+    # Write to disk
+    write.csv(rsem_tpm_matrix, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_tpm_matrix.csv"), row.names=FALSE)
+    write.csv(rsem_count_matrix, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_count_matrix.csv"), row.names=FALSE)
+    write.csv(rsem_txs_table,file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_txs_table.csv"))
+  }
+}
+
+#' Annotate the features using BioConductor annotation packages
+#' 
+#' Annotate the transcripts using bioConductor annotation packages. 
+#' 
+#' Annotates the transcripts using the bioconductor annotation package specified in the
+#' annotation_library argument
+#' @param annotation_library \code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.
+#' @param force \code{logical} force the annotation step to re-run
+#' @export
+BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE){
+  featuredata_outfile<-"rsem_fdata.csv"
+  if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
+    message("Annotation already done, skipping. Use force=TRUE to rerun.")
+    return(0)
+  }
+  do.call(require,(list(eval(annotation_library))))
+  require(annotate)
+  require(org.Hs.eg.db)
+  message("Annotating transcripts.")
+  txdb <- get(annotation_library)
+  rsem_txs_table <- fread(file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_txs_table.csv"))
+  
+  # create a table with one transcript per line
+  tx_to_gid <- rsem_txs_table[,list(transcript_id=strsplit(as.character(transcript_ids),",")[[1]]),by="gene_id"]
+  
+  # map the transcripts to entrez gene ids
+  tx_to_eid <- data.table(select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
+  setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
+  
+  # Add gene symbol
+  tx_to_eid[!is.na(entrez_id),gene_symbol:=getSYMBOL(tx_to_eid[!is.na(entrez_id),entrez_id], data='org.Hs.eg')]
+  
+  # merge all to map information to RSEM gene_ids
+  tx_table <- merge(tx_to_gid, tx_to_eid, by="transcript_id")
+  tx_table_reduced <- tx_table[,list(entrez_id=paste(unique(entrez_id),collapse=","), transcript_id=paste(unique(transcript_id),collapse=","), gene_symbol=paste(unique(gene_symbol),collapse=",")),by="gene_id"]
+  
+  # Write to disc and order by gene_id
+  message("Writing feature data to rsem_fdata.csv")
+  write.csv(tx_table_reduced[order(gene_id)], file=file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile), row.names=FALSE)
+}
+
+#' Produce a report listing the tools and packages used by the pipeline.
+#' 
+#' Produce a report listing the tools and packages used by the pipeline.
+#' 
+#' Helps with reproducibility by producing a report listing the tools and packages used by the pipeline.
+#' @export
+pipelineReport<-function(){
+  require(pander)
+  require(plyr)
+  #save the configuration, since we're probably done.
+  saveConfig()
+  command <- c("ascp --version",
+               "fastq-dump --version",
+               "bowtie2 --version",
+               "fastqc --version",
+               "rsem-calculate-expression --version")
+  versions<-sapply(command,function(x)system(x,intern=TRUE)) 
+  session<-capture.output(sessionInfo())
+  sapply(versions,function(x)cat(paste0(x,"\n"),"\n"))
+  cat(paste0(session,"\n"))
+}
+
+saveConfig <- function(){
+  #TODO blindly stores configuration info. 
+  #Wanto to use YAML eventually.
+  config<-getConfig(); 
+  saveRDS(config,file=file.path(config[["subdirs"]][["CONFIG"]],"configuration.rds"))
+  invisible(TRUE)
+} 
+
+#' Read the configuration from a project
+#' 
+#' Read the configuration from a project
+#' 
+#' Read the configuration from a project, stored in the CONFIG directory
+#' 
+#' @param project \code{character} the path to the project folder
+#' @export
+readConfig <- function(project=NULL){
+  #TODO this just blindly reads the config info. Some error checking needs to be done, ensuring the configuration matches what's in the project directory.
+  #Ideally should call configure_project as well. 
+  #Want to also store human-readable config information ultimately, perhaps using YAML.
+  confdir <- file.path(project,"CONFIG")
+  error<-length(list.files(confdir,pattern="configuration.rds"))!=1
+  if(error){
+    message("No configuration information found")
+    return(invisible(FALSE))
+  }
+  obj<-readRDS(list.files(confdir,pattern="configuration.rds",full=TRUE))
+  
+  #store in the namespace
+  ns <- getNamespace("RNASeqPipelineR")
+  unlockBinding(sym = "rnaseqpipeliner_configuration",ns)
+  assign("rnaseqpipeliner_configuration", obj, envir = ns) 
+  invisible(TRUE)
 }

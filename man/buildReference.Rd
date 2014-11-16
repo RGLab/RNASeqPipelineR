@@ -9,7 +9,7 @@ buildReference(path = NULL, gtf_file = "", fasta_file = NULL,
 \arguments{
 \item{path}{\code{character} specify the path to the Utils directory.}
 
-\item{gtf_file}{\code{character} the name of the gtf file. Empty by default}
+\item{gtf_file}{\code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`}
 
 \item{fasta_file}{\code{character} the name of the fasta file, must be specified}
 
@@ -20,6 +20,9 @@ Builds a reference genome at `Utils/Reference_Genome`
 }
 \details{
 You must specify the Utils path if it is not already defined, and have your genome in a folder titled
-`Reference_Genome`. This function will construct the reference genome.
+`Reference_Genome`. This function will construct the reference genome using RSEM tools.
+The command line is the default shown in the documentation.
+`rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
+If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
 }
 
