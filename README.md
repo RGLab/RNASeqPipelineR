@@ -14,7 +14,8 @@ The following command line utilities:
 SRA Toolkit (from NCBI http://www.ncbi.nlm.nih.gov/books/NBK158900/)
 ascp (Aspera scp client, distributed with Aspera Connect)
 RSEM (http://deweylab.biostat.wisc.edu/rsem/)
-bowtie2
+bowtie2 (http://www.nature.com/nmeth/journal/v9/n4/full/nmeth.1923.html)
+BioConductor (http://www.bioconductor.org/)
 
 ## Development Notes
 
@@ -29,5 +30,4 @@ When setting up a new project the package will download `SRAmetadb.sqlite` unles
 
 SRA files are downloaded if not present. This is time consuming, obviously. The files are available on our computer server storage, and can be copied from there for development. 
 
-Much of the proposed API still needs to be implemented. The project is definitely not yet ready for use.
-
+Basic functionality exits, needs work to generalize to other tools.
