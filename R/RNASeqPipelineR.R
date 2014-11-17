@@ -49,7 +49,7 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
   if(success)
     invisible()
   cmnd_prefix <- "mkdir -p "
-  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG")
+  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG",OUTPUT="OUTPUT")
   if(load_from_immport)
     dirs<-c(dirs,Tab="Tab")
   subdirs <- file.path(project_dir,dirs)
@@ -72,6 +72,27 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
   configure_project(subdirs)
   saveConfig()
 } 
+
+#' Load an RNASeqPipelineR project
+#' 
+#' Load and RNASeqPipelineR project
+#' 
+#' Load an RNASeqPipelineR project from disk.
+#' @param project_dir \code{character} the path to the project
+#' @param name \code{character} the name of the project
+#' @export
+loadProject <- function(project_dir=NULL,name=NULL){
+  if(dir.exists(normalizePath(file.path(project_dir,name)))){
+    #load the configuration and return
+    message("Loading configuration for ",name, " from ", project_dir);
+    success<-readConfig(normalizePath(file.path(project_dir,name)))      
+  }
+  if(success){
+    invisible()
+  }else{
+    stop("Can't load project.")
+  }
+}
 
 #global config in package namespace
 rnaseqpipeliner_configuration <- list()
@@ -560,6 +581,8 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
     return(0)
   }
   do.call(require,(list(eval(annotation_library))))
+  #save the annotation library
+  assignConfig("annotation_library",annotation_library)
   require(annotate)
   require(org.Hs.eg.db)
   message("Annotating transcripts.")
@@ -590,6 +613,7 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
 #' Produce a report listing the tools and packages used by the pipeline.
 #' 
 #' Helps with reproducibility by producing a report listing the tools and packages used by the pipeline.
+#' This needs to be run on the system that produced the results. Output to project directory OUTPUT/pipeline_report.md.
 #' @export
 pipelineReport<-function(){
   require(pander)
@@ -605,8 +629,20 @@ pipelineReport<-function(){
   session<-capture.output(sessionInfo())
   sapply(versions,function(x)cat(paste0(x,"\n"),"\n"))
   cat(paste0(session,"\n"))
+  #output to OUTPUT/pipeline_report.md
+  f<-file(open = "a",description = (file.path(getConfig()[["subdirs"]][["OUTPUT"]],"pipeline_report.md")))
+  sapply(versions,function(x)cat(paste0(x,"\n"),"\n",file = f))
+  cat(paste0(session,"\n"),file = f)
+  close(f)
 }
 
+#' Save the configuration for a project
+#' 
+#' Save the configuration for a project
+#' 
+#' Save the configuration from a project, stored in the CONFIG directory
+#' 
+#' @export
 saveConfig <- function(){
   #TODO blindly stores configuration info. 
   #Wanto to use YAML eventually.
@@ -615,9 +651,9 @@ saveConfig <- function(){
   invisible(TRUE)
 } 
 
-#' Read the configuration from a project
+#' Read the configuration for a project
 #' 
-#' Read the configuration from a project
+#' Read the configuration for a project
 #' 
 #' Read the configuration from a project, stored in the CONFIG directory
 #' 
@@ -640,4 +676,33 @@ readConfig <- function(project=NULL){
   unlockBinding(sym = "rnaseqpipeliner_configuration",ns)
   assign("rnaseqpipeliner_configuration", obj, envir = ns) 
   invisible(TRUE)
+}
+
+#' Return and expression set of the counts or TPM values
+#' 
+#' Construct and return an expression set of counts or TPM values
+#' 
+#' Constructs an expression set of counts or tpm values depending on the value of which parameter.
+#' @param which \code{character} \code{c("counts","tpm")} specifies what to return.
+#' @export
+getExpressionSet <- function(which="counts"){
+  which<-match.arg(arg = which, c("counts","tpm"))
+  if(which%in%"counts")
+    mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_count_matrix.csv",full=TRUE))
+  else
+    mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_tpm_matrix.csv",full=TRUE))
+  featuredata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_fdata.csv",full=TRUE))
+  pdata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_pdata.csv",full=TRUE))
+
+  #Construct an Eset and return
+  pdata<-data.frame(pdata)
+  rownames(pdata) <- pdata$srr  
+  pdata<-AnnotatedDataFrame(data.frame(pdata))
+  featuredata<-AnnotatedDataFrame(data.frame(featuredata))
+  matr<-as.matrix(mat[,-1,with=FALSE])
+  rownames(matr)<-mat[,gene_id]
+  row.names(pdata)
+  matr<-matr[,rownames(pdata)]
+  eset<-ExpressionSet(assayData = matr,phenoData = pdata, featureData = featuredata, annotation = getConfig()[["annotation_library"]])
+  eset
 }

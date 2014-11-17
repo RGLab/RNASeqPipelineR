@@ -50,3 +50,7 @@ BioCAnnotate(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE)
 
 #output version info
 pipelineReport()
+
+# For existing project load and grab data
+loadProject(project_dir = "tests",name="myproject")
+eset<-getExpressionSet()
