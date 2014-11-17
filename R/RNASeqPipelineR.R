@@ -41,6 +41,7 @@ NULL
 #' createProject("myproject",path=".",load_from_immport=TRUE)
 createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport=FALSE){
   project_dir <- file.path(path,project_name)
+  success<-FALSE
   if(dir.exists(normalizePath(project_dir))){
     #load the configuration and return
     message("Project exists, loading configuration.")
@@ -235,7 +236,6 @@ getSRAdb <- function(path=NULL){
   }else{
     message("SRAmetadb.sqlite found")
   }
-  
   #connect and grab the data
   sra_con <- dbConnect(SQLite(),file.path(getConfig()[["subdirs"]]["Utils"],"SRAdb",'SRAmetadb.sqlite'))
   sra_tables <- dbListTables(sra_con)
@@ -505,7 +505,7 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' Use the RSEM tool to align reads
 #' 
 #' Uses RSEM to align reads in FASTQ files against the reference genome.
-#' @param ncores \core{integer} specify how many cores to use
+#' @param ncores \code{integer} specify how many cores to use
 #' @export
 RSEMCalculateExpression <- function(ncores=4){
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
@@ -578,7 +578,7 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   featuredata_outfile<-"rsem_fdata.csv"
   if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
     message("Annotation already done, skipping. Use force=TRUE to rerun.")
-    return(0)
+    invisible(return(0))
   }
   do.call(require,(list(eval(annotation_library))))
   #save the annotation library

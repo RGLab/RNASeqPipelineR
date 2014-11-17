@@ -6,7 +6,7 @@
 RSEMCalculateExpression(ncores = 4)
 }
 \arguments{
-\item{ncores}{\core{integer} specify how many cores to use}
+\item{ncores}{\code{integer} specify how many cores to use}
 }
 \description{
 Use the RSEM tool to align reads

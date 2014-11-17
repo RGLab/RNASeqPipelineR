@@ -10,5 +10,6 @@ Produce a report listing the tools and packages used by the pipeline.
 }
 \details{
 Helps with reproducibility by producing a report listing the tools and packages used by the pipeline.
+This needs to be run on the system that produced the results. Output to project directory OUTPUT/pipeline_report.md.
 }
 
