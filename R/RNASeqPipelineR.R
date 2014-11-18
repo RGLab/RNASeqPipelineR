@@ -706,7 +706,7 @@ getExpressionSet <- function(which="counts"){
     mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_tpm_matrix.csv",full=TRUE))
   featuredata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_fdata.csv",full=TRUE))
   pdata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_pdata.csv",full=TRUE))
-
+  
   #Construct an Eset and return
   pdata<-data.frame(pdata)
   rownames(pdata) <- pdata$srr  
@@ -729,8 +729,9 @@ getExpressionSet <- function(which="counts"){
 #' @param species \code{character} c("hs","mm")
 #' @param ec \code{integer}, c(0,1,2)
 #' @param pset \code{character} c("flex")
+#' @param ncores \code{integer} number of cores for running in parallel
 #'@export
-MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex"){
+MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1){
   pset<-match.arg(pset,"flex")
   gene<-match.arg(gene,c("TRB","TRA"))
   species<-match.arg(species,c("hs","mm",NULL))
@@ -753,9 +754,18 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex"){
   tcrdir <- file.path(dirname(fastqdir),"TCR")
   system(paste0("mkdir -p ",tcrdir))
   fastqfiles<-list.files(fastqdir,pattern="fastq$",full=TRUE)
-  for(i in fastqfiles){
-    outpath<-file.path(tcrdir,gsub("fastq",gene,basename(i)))
-    commandi<-paste0(command, i, " ", outpath)
-    system(commandi)
-  }
-} 
+  if(ncores>1){
+    outpath<-NULL
+    for(i in fastqfiles){
+      outpath<-c(outpath,file.path(tcrdir,gsub("fastq",gene,basename(i))))
+    }
+    inargs<-paste(as.vector(apply(cbind(fastqfiles,outpath),1,function(x)paste(x,collapse=" "))),collapse=" ")
+    system(paste0("parallel -j ",ncores," -n 2 ",command," {} ::: ",inargs))
+  }else{
+    for(i in fastqfiles){
+      outpath<-file.path(tcrdir,gsub("fastq",gene,basename(i)))
+      commandi<-paste0(command, i, " ", outpath)
+      system(commandi)
+    }
+  } 
+}
