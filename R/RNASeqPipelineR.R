@@ -757,13 +757,13 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1){
   if(ncores>1){
     outpath<-NULL
     for(i in fastqfiles){
-      outpath<-c(outpath,file.path(tcrdir,gsub("fastq",gene,basename(i))))
+      outpath<-c(outpath,file.path(tcrdir,paste0(gsub("fastq",gene,basename(i)),".txt")))
     }
     inargs<-paste(as.vector(apply(cbind(fastqfiles,outpath),1,function(x)paste(x,collapse=" "))),collapse=" ")
     system(paste0("parallel -j ",ncores," -n 2 ",command," {} ::: ",inargs))
   }else{
     for(i in fastqfiles){
-      outpath<-file.path(tcrdir,gsub("fastq",gene,basename(i)))
+      outpath<-file.path(tcrdir,paste0(gsub("fastq",gene,basename(i)),".txt"))
       commandi<-paste0(command, i, " ", outpath)
       system(commandi)
     }
