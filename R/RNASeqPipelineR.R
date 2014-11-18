@@ -730,9 +730,11 @@ getExpressionSet <- function(which="counts"){
 #' @param ec \code{integer}, c(0,1,2)
 #' @param pset \code{character} c("flex")
 #' @param ncores \code{integer} number of cores for running in parallel
+#' @param output_format \code{character} either "txt" or "cls"
 #'@export
-MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1){
+MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_format="text"){
   pset<-match.arg(pset,"flex")
+  output_format<-match.arg(output_format,c("txt","cls"))
   gene<-match.arg(gene,c("TRB","TRA"))
   species<-match.arg(species,c("hs","mm",NULL))
   if(!ec%in%c(0,1,2)){
@@ -741,6 +743,10 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1){
   if(length(system("which mitcr",intern=TRUE))==0){
     stop("mitcr can't be found on the path")
   }
+  if(output_format=="txt")
+    output_format<-".txt"
+  else
+    output_format<-".cls"
   command <-  paste0("mitcr -pset ",pset)
   command <- paste0(command," -gene ",gene," ")
   if(!is.null(species)){
@@ -757,13 +763,13 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1){
   if(ncores>1){
     outpath<-NULL
     for(i in fastqfiles){
-      outpath<-c(outpath,file.path(tcrdir,paste0(gsub("fastq",gene,basename(i)),".txt")))
+      outpath<-c(outpath,file.path(tcrdir,paste0(gsub("fastq",gene,basename(i)),output_format)))
     }
     inargs<-paste(as.vector(apply(cbind(fastqfiles,outpath),1,function(x)paste(x,collapse=" "))),collapse=" ")
     system(paste0("parallel -j ",ncores," -n 2 ",command," {} ::: ",inargs))
   }else{
     for(i in fastqfiles){
-      outpath<-file.path(tcrdir,paste0(gsub("fastq",gene,basename(i)),".txt"))
+      outpath<-file.path(tcrdir,paste0(gsub("fastq",gene,basename(i)),output_format))
       commandi<-paste0(command, i, " ", outpath)
       system(commandi)
     }

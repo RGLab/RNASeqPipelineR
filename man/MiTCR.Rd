@@ -3,7 +3,8 @@
 \alias{MiTCR}
 \title{Run MiTCR on each fastQ file}
 \usage{
-MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1)
+MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1,
+  output_format = "text")
 }
 \arguments{
 \item{gene}{\code{character} c("TRB","TRA")}
@@ -15,6 +16,8 @@ MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1)
 \item{pset}{\code{character} c("flex")}
 
 \item{ncores}{\code{integer} number of cores for running in parallel}
+
+\item{output_format}{\code{character} either "txt" or "cls"}
 }
 \description{
 Run the MiTCR tool on each fastQ file
