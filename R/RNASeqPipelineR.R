@@ -21,7 +21,7 @@ NULL
 #' 
 #' createProject will create a new RNASeqPipeline 
 #' project under directory 'name' in the path specified by 'path'.
-#' The function creates the directory structure required by RNASeqPipeline
+#' The function creates the directory structure libraryd by RNASeqPipeline
 #' within the new project directory, including locations for fastQ files, 
 #' fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
 #' must be downloaded or linked to a GEO accession. Standard locations will also be provided 
@@ -214,7 +214,7 @@ loadImmportTables <- function(warn=-1,verbose=0){
 #' Downloads and stores the SRAdb sqlite database if necessary and stores it in 
 #' the Utils folder.
 #' @export
-getSRAdb <- function(path=NULL){
+getAndConnectSRAdb <- function(path=NULL){
   if(is.null(path)){
     stop("You must specify a path to the SRAmetadb.sqlite file, or a path where the file will be placed.")
   }
@@ -278,12 +278,25 @@ detectAspera<-function(path=NULL){
 #' If the files are already present, they will not be downloaded.
 #' 
 #' @export
-downloadSRA <- function(){
-  n = nrow(getConfig()[["immport_tables"]][["GSM_table"]])
+downloadSRA <- function(GSE_accession=NULL){
+  #Two branches.. if immport_tables exists and if they don't
+  if(names(getConfig())%in%"immport_tables"){
+    n = nrow(getConfig()[["immport_tables"]][["GSM_table"]])
+  }else{
+    sra_con<-getConfig()[["sra_con"]]
+    if(is.null(GSE_accession)){
+      stop("Must supply a GEO accession to download SRA files.")
+    }
+    stop("Support for SRA from non-immport data is pending.")
+  }
   cond_eval <- length(list.files(getConfig()[["subdirs"]][["SRA"]], pattern=".sra")) < n
-  
   if(cond_eval){
-    GSM_table<-getConfig()[["immport_tables"]][["GSM_table"]]
+    if(names(getConfig())%in%"immport_tables"){
+      GSM_table<-getConfig()[["immport_tables"]][["GSM_table"]]
+    }else{
+      sra_con<-getConfig()[["sra_con"]]
+      stop("Support for SRA from non-immport data is pending.")
+    }
     successes<-0
     for(file in GSM_table[,GSM]) {
       gd <- getGEO(file, destdir=getConfig()[["subdirs"]][["GEO"]])
@@ -580,11 +593,11 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
     message("Annotation already done, skipping. Use force=TRUE to rerun.")
     invisible(return(0))
   }
-  do.call(require,(list(eval(annotation_library))))
+  do.call(library,(list(eval(annotation_library))))
   #save the annotation library
   assignConfig("annotation_library",annotation_library)
-  require(annotate)
-  require(org.Hs.eg.db)
+  library(annotate)
+  library(org.Hs.eg.db)
   message("Annotating transcripts.")
   txdb <- get(annotation_library)
   rsem_txs_table <- fread(file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_txs_table.csv"))
@@ -616,8 +629,8 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
 #' This needs to be run on the system that produced the results. Output to project directory OUTPUT/pipeline_report.md.
 #' @export
 pipelineReport<-function(){
-  require(pander)
-  require(plyr)
+  library(pander)
+  library(plyr)
   #save the configuration, since we're probably done.
   saveConfig()
   command <- c("ascp --version",
@@ -706,3 +719,43 @@ getExpressionSet <- function(which="counts"){
   eset<-ExpressionSet(assayData = matr,phenoData = pdata, featureData = featuredata, annotation = getConfig()[["annotation_library"]])
   eset
 }
+
+#' Run MiTCR on each fastQ file
+#' 
+#' Run the MiTCR tool on each fastQ file
+#' 
+#' Runs MiTCR on each fastQ file. 
+#' @param gene \code{character} c("TRB","TRA")
+#' @param species \code{character} c("hs","mm")
+#' @param ec \code{integer}, c(0,1,2)
+#' @param pset \code{character} c("flex")
+#'@export
+MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex"){
+  pset<-match.arg(pset,"flex")
+  gene<-match.arg(gene,c("TRB","TRA"))
+  species<-match.arg(species,c("hs","mm",NULL))
+  if(!ec%in%c(0,1,2)){
+    stop("Invalid value of ec")
+  }
+  if(length(system("which mitcr",intern=TRUE))==0){
+    stop("mitcr can't be found on the path")
+  }
+  command <-  paste0("mitcr -pset ",pset)
+  command <- paste0(command," -gene ",gene," ")
+  if(!is.null(species)){
+    command <- paste0(command,"-species ",species," ")
+  }
+  if(!is.null(ec)){
+    command <- paste0(command,"-ec ",ec," ")
+  }
+  #Run on each fastq file and output to TCR directory
+  fastqdir <- getConfig()[["subdirs"]][["FASTQ"]]
+  tcrdir <- file.path(dirname(fastqdir),"TCR")
+  system(paste0("mkdir -p ",tcrdir))
+  fastqfiles<-list.files(fastqdir,pattern="fastq$",full=TRUE)
+  for(i in fastqfiles){
+    outpath<-file.path(tcrdir,gsub("fastq",gene,basename(i)))
+    commandi<-paste0(command, i, " ", outpath)
+    system(commandi)
+  }
+} 

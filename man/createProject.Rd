@@ -21,7 +21,7 @@ Create the skeleton for a new RNASeqPipeline project.
 \details{
 createProject will create a new RNASeqPipeline
 project under directory 'name' in the path specified by 'path'.
-The function creates the directory structure required by RNASeqPipeline
+The function creates the directory structure libraryd by RNASeqPipeline
 within the new project directory, including locations for fastQ files,
 fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
 must be downloaded or linked to a GEO accession. Standard locations will also be provided

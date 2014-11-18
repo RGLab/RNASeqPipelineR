@@ -3,7 +3,7 @@
 \alias{downloadSRA}
 \title{Download FastQ files based on Immport data and SRA db, unless they already exist.}
 \usage{
-downloadSRA()
+downloadSRA(GSE_accession = NULL)
 }
 \description{
 Based on the SRA db, download the FastQ files, unless they already exist.
