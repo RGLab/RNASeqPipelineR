@@ -17,7 +17,7 @@ MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1,
 
 \item{ncores}{\code{integer} number of cores for running in parallel}
 
-\item{output_format}{\code{character} either "txt" or "cls"}
+\item{output_format}{\code{character} either "txt" or "cls". cls files can be viewed in the MiTCR viewer. Txt files can be parsed and used to annotate libraries.}
 }
 \description{
 Run the MiTCR tool on each fastQ file

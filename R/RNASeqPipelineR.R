@@ -248,6 +248,7 @@ getAndConnectSRAdb <- function(path=NULL){
 #' Detect the installation location of aspera client based on expected defaults
 #' 
 #' Sets the location of aspera client based on expected defaults. Or pass the installation path
+#' @note Needs to be tested on linux and modified to locate the identity keys for aspera on linux
 #' @param path \code{character} path to the aspera client. If NULL, will try to detect the location based on the OS
 #' @export
 detectAspera<-function(path=NULL){
@@ -265,6 +266,13 @@ detectAspera<-function(path=NULL){
       stop("Can't detect aspera installation for Mac OS. Pass a path variable to configure.")
     }
     message("aspera detected at ", path)
+    aspera_path=path
+    assignConfig("aspera_path",aspera_path)
+  }else{
+    if(is.null(path)){
+      message("Run detectAspera with the path argument to configure the aspera client for your OS.")
+    }
+    stopifnot(file.exists(file.path(path,"ascp")))
     aspera_path=path
     assignConfig("aspera_path",aspera_path)
   }
@@ -730,7 +738,7 @@ getExpressionSet <- function(which="counts"){
 #' @param ec \code{integer}, c(0,1,2)
 #' @param pset \code{character} c("flex")
 #' @param ncores \code{integer} number of cores for running in parallel
-#' @param output_format \code{character} either "txt" or "cls"
+#' @param output_format \code{character} either "txt" or "cls". cls files can be viewed in the MiTCR viewer. Txt files can be parsed and used to annotate libraries.
 #'@export
 MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_format="text"){
   pset<-match.arg(pset,"flex")

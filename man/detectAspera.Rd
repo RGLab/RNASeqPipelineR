@@ -14,4 +14,7 @@ Detect the installation location of aspera client based on expected defaults
 \details{
 Sets the location of aspera client based on expected defaults. Or pass the installation path
 }
+\note{
+Needs to be tested on linux and modified to locate the identity keys for aspera on linux
+}
 
