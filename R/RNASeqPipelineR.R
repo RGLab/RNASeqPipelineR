@@ -15,6 +15,13 @@
 #' @import SRAdb
 NULL
 
+
+dir.exists<-function (x)
+{
+  res <- file.exists(x) & file.info(x)$isdir
+  setNames(res, x)
+}
+
 #' Create a new RNASeqPipeline project
 #' 
 #' Create the skeleton for a new RNASeqPipeline project.
