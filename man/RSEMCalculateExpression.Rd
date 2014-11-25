@@ -3,15 +3,20 @@
 \alias{RSEMCalculateExpression}
 \title{Use the RSEM tool to align the reads}
 \usage{
-RSEMCalculateExpression(ncores = 4)
+RSEMCalculateExpression(ncores = 4, paired = FALSE)
 }
 \arguments{
 \item{ncores}{\code{integer} specify how many cores to use}
+
+\item{paired}{\code{logical} specify whether you have paried reads or not.}
 }
 \description{
 Use the RSEM tool to align reads
 }
 \details{
-Uses RSEM to align reads in FASTQ files against the reference genome.
+Uses RSEM to align reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes
+paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
+matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
+and read 2 is assumed to be downstream.
 }
 

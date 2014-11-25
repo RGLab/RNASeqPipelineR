@@ -426,7 +426,7 @@ convertSRAtoFastQ <- function(ncores=8){
 runFastQC <- function(ncores=8){
   fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
   run_command <-  paste0("parallel -j ", ncores," fastqc {} -o ",getConfig()[["subdirs"]][["FASTQC"]]," -q ::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"*.fastq"))                             
-  if(fastQCL){
+  if(fastQCL|length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))==0){
     out<-system(run_command)
     if(out==0){
       message("Finished fastqc process for ",length(list.files(getConfig()[["subdirs"]][["FASTQ"]])), " files.")
@@ -532,10 +532,14 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' 
 #' Use the RSEM tool to align reads
 #' 
-#' Uses RSEM to align reads in FASTQ files against the reference genome.
+#' Uses RSEM to align reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes 
+#' paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
+#' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
+#' and read 2 is assumed to be downstream. 
 #' @param ncores \code{integer} specify how many cores to use
+#' @param paired \code{logical} specify whether you have paried reads or not.
 #' @export
-RSEMCalculateExpression <- function(ncores=4){
+RSEMCalculateExpression <- function(ncores=4,paired=FALSE){
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
   lr <- length(list.files(path=rsem_dir,pattern=".genes.results"))
@@ -543,12 +547,24 @@ RSEMCalculateExpression <- function(ncores=4){
   reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   if(lr!=lq){
-    command <- paste0("cd ",rsem_dir," && parallel -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",file.path(fastq_dir,"*.fastq"))
+    if(!paired){
+      command <- paste0("cd ",rsem_dir," && parallel -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",file.path(fastq_dir,"*.fastq"))
+    }else{
+      fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
+      library(clue)
+      D<-adist(fastq_files)
+      diag(D)<-1e20
+      pairs<-solve_LSAP(D)
+      pairs<-matrix(fastq_files[pairs],ncol=2,byrow=TRUE)
+      pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
+      pairs<-cbind(pairs,basename(pairs[,1]))
+      writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
+      command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
+    }
     system(command)
   }else{
     message("Expression already calculated")
   }
-  
 }
 
 #' Assemble an expression matrix of all results
