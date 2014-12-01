@@ -547,10 +547,16 @@ RSEMCalculateExpression <- function(ncores=4,paired=FALSE){
   reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   if(lr!=lq){
+    #do a set difference
+    keep<-setdiff(gsub("\\.fastq","",list.files(path=fastq_dir,pattern=".fastq")),gsub("\\.genes\\.results","",list.files(path=rsem_dir,pattern=".genes.results")))    
     if(!paired){
-      command <- paste0("cd ",rsem_dir," && parallel -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",file.path(fastq_dir,"*.fastq"))
+      keep<-paste0(keep,".fastq")
+      myfiles<-file.path(fastq_dir,keep)
+      command <- paste0("cd ",rsem_dir," && parallel -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",myfiles)
     }else{
-      fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
+      keep<-paste0(keep,".fastq")
+      fastq_files<-file.path(fastq_dir,keep)
+      #fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
       library(clue)
       D<-adist(fastq_files)
       diag(D)<-1e20
