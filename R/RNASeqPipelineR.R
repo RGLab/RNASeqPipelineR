@@ -819,3 +819,27 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_forma
     }
   } 
 }
+
+#' Run PEAR to assemble paired-end fastq files into one files.
+#' 
+#' Run the pear tool to assemble paired end fastq files into a single output fastq file.
+#' 
+#' Use this as a preliminary preprocessing step to running MiTCR if you have paired-end data.
+#' @param ncores \code{integer} number of cores to use
+pear<-function(ncores=10){
+  fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
+  try(pear_directory<-getConfig()[["subdirs"]][["PEAR"]])
+  if(inherits(pear_directory,"try-eror")){
+    pear_directory<-(file.path(dirname(getConfig()[["subdirs"]][["FASTQ"]]),"PEAR"))
+    dir.create(pear_directory)
+    subdirs<-getConfig()[["subdirs"]]
+    subdirs[["PEAR"]]<-pear_directory
+    assignConfig("subdirs",subdirs)
+  }
+  #We just assume that paired fastq files differ by one character, that there are an even number of them, and that the operating system
+  #will return them to us in lexicographical order. 
+  files<-normalizePath(list.files(path=fastq_dir,pattern="*.fastq",full=FALSE))
+  write(files,file=file.path(pear_directory,"pear_arguments.txt"))
+  command<-paste0("cd ", fastq_dir, " && parallel -j ",ncores, " -n2 pear -f {1} -r {2} -o ",file.path(pear_directory,"{1}")," :::: < ",file.path(pear_directory,"pear_arguments.txt"))
+  system(command)
+}
