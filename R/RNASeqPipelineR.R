@@ -768,8 +768,9 @@ getExpressionSet <- function(which="counts"){
 #' @param pset \code{character} c("flex")
 #' @param ncores \code{integer} number of cores for running in parallel
 #' @param output_format \code{character} either "txt" or "cls". cls files can be viewed in the MiTCR viewer. Txt files can be parsed and used to annotate libraries.
+#' @paired \code{logical} specify whether data is paired (in which case the fastq files in PEAR directory are used). Defaults to FALSE.
 #'@export
-MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_format="text"){
+MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_format="text",paired=FALSE){
   pset<-match.arg(pset,"flex")
   output_format<-match.arg(output_format,c("txt","cls"))
   gene<-match.arg(gene,c("TRB","TRA"))
@@ -793,7 +794,13 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_forma
     command <- paste0(command,"-ec ",ec," ")
   }
   #Run on each fastq file and output to TCR directory
-  fastqdir <- getConfig()[["subdirs"]][["FASTQ"]]
+  if(paired){
+    fastqdir <- getConfig()[["subdirs"]][["PEAR"]]
+    if(!dir.exists(fastqdir))
+      stop("paired is TRUE, but PEAR directory not found. Did you run pear?")
+  }else{
+    fastqdir <- getConfig()[["subdirs"]][["FASTQ"]]
+  }
   tcrdir <- file.path(dirname(fastqdir),"TCR")
   system(paste0("mkdir -p ",tcrdir))
   fastqfiles<-list.files(fastqdir,pattern="fastq$",full=TRUE)
