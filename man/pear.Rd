@@ -4,6 +4,7 @@
 \title{Run PEAR to assemble paired-end fastq files into one files.}
 \usage{
 pear(ncores = 4)
+
 }
 \arguments{
 \item{ncores}{\code{integer} number of cores to use}
