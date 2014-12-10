@@ -813,7 +813,11 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_forma
   }
   tcrdir <- file.path(dirname(fastqdir),"TCR")
   system(paste0("mkdir -p ",tcrdir))
-  fastqfiles<-list.files(fastqdir,pattern="fastq$",full=TRUE)
+  if(!paired){
+    fastqfiles<-list.files(fastqdir,pattern="fastq$",full=TRUE)
+  }else{
+    fastqfiles<-list.files(fastqdir,pattern="\\.assembled\\.fastq$",full=TRUE)
+  }
   if(ncores>1){
     outpath<-NULL
     for(i in fastqfiles){
