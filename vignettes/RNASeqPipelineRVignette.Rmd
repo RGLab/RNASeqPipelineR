@@ -1,0 +1,229 @@
+---
+output:
+  html_document:
+    keep_md: yes
+  pdf_document:
+    keep_tex: yes
+---
+<!--\VignetteEngine{knitr::knitr}-->
+# Using RNASeqPipelineR
+  This vignette describes how to use RNASeqPipelineR to process your RNASeq data.
+The package requires a number of different external programs in order to function. 
+These are listed in the package README.
+
+## System requirements
+You need the following R packages:  
+  data.table  
+  GEOquery
+  RSQLite  
+  SRAdb  
+
+The following command line utilities:  
+  SRA Toolkit (from NCBI http://www.ncbi.nlm.nih.gov/books/NBK158900/)  
+  ascp (Aspera scp client, distributed with Aspera Connect)   
+  RSEM (http://deweylab.biostat.wisc.edu/rsem/)  
+  bowtie2 (http://www.nature.com/nmeth/journal/v9/n4/full/nmeth.1923.html)  
+  BioConductor (http://www.bioconductor.org/)  
+  MiTCR  (http://mitcr.milaboratory.com/)  
+  fastqc (http://www.bioinformatics.babraham.ac.uk/projects/fastqc/)  
+  PEAR (http://sco.h-its.org/exelixis/web/software/pear/) for paired end assembly  
+  GEOQuery from BioConductor  
+  GNU Parallel  
+  `annotate` package from BioConductor  
+  `pander` R package  
+
+It is assumed that the above can be invoked as from the path as:  
+- `ascp`  
+- `rsem`  
+- `bowtie2`  
+- `mitcr`  
+- `fastqc`  
+- `pear`  
+- `parallel`  
+
+The following shell script is required for invoking `mitcr` (assuming the jar file is in `/usr/local/lib`)   
+
+```
+#!/bin/bash
+/usr/bin/java -Xmx4g -jar /usr/local/lib/mitcr.jar "$@"
+```
+
+and should be in your path.
+
+##Assumptions and Caveats
+The package is not as robust as it could be and makes all sorts of assumptions (that are not unreasonable, but you need to be careful).
+- For paired-end data, we assume that paired FASTQ files differ by only one character.
+- We assume fastq files live in one directory and are not scattered across mutliple subdirectories in the main FASTQ folder.
+- We assume that command line tools have standard names (listed above) and are in your path. 
+- Error checking is present, but if you encounter a cryptic error message, report it, we'll beef up the error handling. Contact the package maintainer named in the `DESCRIPTION` file. Better yet, open a `github` ticket.
+
+## Usage
+
+### Create a project
+
+```{r load_libraries,eval=TRUE}
+library(data.table)
+library(GEOquery)
+library(knitr)
+library(RNASeqPipelineR)
+temp<-tempdir()
+createProject("RNASeqPipelineRExample", path=temp, load_from_immport=FALSE)
+knitr::opts_chunk$set(cache=TRUE)
+```
+`load_from_immport` is set to false since we are starting with `fastq` files. 
+
+If the project already exists, you can load the project configuration.
+
+```{r load_project,eval=FALSE}
+loadProject(project_dir = temp,name="RNASeqPipelineRExample")
+```
+
+We move the fastq files that we want to process into place. RNASeqPipelineR just tracks the directories for various parts of the pipeline.  
+These can be accessed using `getConfig()[["subdirs"]]`. The directory structure for the project is created when the project is created using `creatProject`.
+The configuration is automatically saved to the project.
+
+```{r copy_fastq_files}
+ext<-system.file("extdata",package = "RNASeqPipelineR")
+tocopy<-list.files(path=ext,pattern="*.fastq",full=TRUE)
+sapply(tocopy,function(x)file.copy(from = x,to = getConfig()[["subdirs"]][["FASTQ"]]))
+```
+
+We run fastQC on the fastq files:
+
+```{r qc,eval=TRUE}
+#specify the number of cores, RNASeqPipelineR uses GNU parallel.
+runFastQC(ncores=2)
+```
+
+Generate a little figure summarizing the fastQC output. 
+```{r summarize,eval=FALSE,fig.width=12,fig.height=8}
+#summarize FastQC results
+summarizeFastQC()
+```
+
+### Reference Genome
+You need a reference genome to align the fastqc files against. Place the reference outside of the project directory and tell the pipeline where that reference genome lives: It is expected in a directory called `Reference_Genome`.
+
+```{r reference_genome}
+ext<-system.file("extdata",package = "RNASeqPipelineR")
+utils_dir<-list.files(ext,pattern="Utils",full=TRUE)
+list.files(utils_dir) #There it is!
+
+list.files(list.files(utils_dir,full=TRUE),pattern="*") #directory contents
+
+#Configure RNASeqPipelineR to use the reference genome, which has been built to use rsem.
+buildReference(path=utils_dir,gtf_file="UCSC.gtf",fasta_file="hg38.fa",name="hg38")
+```
+
+### Alignment 
+
+Finally we are ready to do the alignment. We tell `RSEMCalculateExpression` to use 4 cores and that the data are paired-end. In this example we're only aligning one sample so `parallel_threads` is 1, and `bowtie_threads` is 5 so `bowtie2` will use 5 cores.  
+```{r align}
+#Align and compute expression counts
+RSEMCalculateExpression(parallel_threads = 1,bowtie_threads = 5,paired=TRUE)
+```
+
+### Construct an expression matrix
+
+Next we combine the assembled files and build expression matrices.  This gets stored in a standard location. 
+
+```{r assemble,eval=TRUE}
+#Assemble an expression matrix of counts and tpm and save them to output files.
+RSEMAssembleExpressionMatrix()
+```
+
+### Annotation
+
+We will annotate the features (genes) using Bioconductor's hg38 UCSC annotations.  
+```{r annotate}
+#Annotate using bioconductor
+BioCAnnotate(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE)
+```
+
+Now we prepare the annotations for cell libraries. We copy our annotations into place in the project directory.
+```{r eval=TRUE,echo=TRUE}
+#Copy our annotations into place
+ext<-system.file("extdata",package = "RNASeqPipelineR")
+annotation_files<-list.files(path=ext,pattern="*.csv",recursive=TRUE,full=TRUE)
+file.copy(from=annotation_files,to=file.path(getConfig()[["subdirs"]][["RAWANNOTATIONS"]],basename(annotation_files)))
+```
+
+Some code to parse the annotations and annotate the matrix. Eventually this will be standardized.
+```{r eval=TRUE}
+#Prepare phenotypic data (stim / unstim)
+raw_annotation_path <- getConfig()[["subdirs"]][["RAWANNOTATIONS"]]
+files.csv <- list.files(raw_annotation_path,pattern="csv",full=TRUE)
+annotations <- fread(files.csv)
+counts<-fread(file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_count_matrix.csv")) #TODO Need a getCountsMatrix function to read this standard file. Likewise for getTPMmatrix
+
+# The sample names are the columns of the expression matrix. The first column is the gene_id, we don't want that now. 
+samplenames<-colnames(counts)[-1]
+
+#Some custom code to make use of the annotation file
+indices<-vector('numeric',length(samplenames))
+for(i in seq_along(annotations$SequencingDate[1:3])){
+  indices[which(samplenames%like%(annotations$SequencingDate[1:3])[i])] <- i
+}
+indices[indices==0] <- 4
+df1 <- data.table(samplenames,indices)
+annotations$indices<-1:4
+```
+
+The two tables we'll be merging:
+
+```{r results="asis"}
+kable(df1)
+kable(annotations)
+```
+
+The sample name column is expected to have the name "srr". In the future we'll make this neater but for now it aligns with the sample annotations when using SRA files. 
+
+```{r merge}
+#merge on indices
+setkey(df1,indices) 
+setkey(annotations,indices)
+annotations <- annotations[df1]
+#set the sample name column to be "srr"
+setnames(annotations,"samplenames","srr")
+```
+
+Here's what we write to the pdata file:
+```{r results='asis'}
+kable(annotations)
+```
+
+```{r output_pdata}
+write.csv(annotations,file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_pdata.csv"),row.names=FALSE)
+```
+
+### Additional analysis
+
+<!--
+Since this is paired-end data, we may want to merge the paired ends. How? We'll use the `pear` tool.
+```{r pear,eval=TRUE}
+#Run PEAR
+pear(ncores = 1) 
+```
+-->
+
+Now we'll run MiTCR to annotate the short reads. 
+
+```{r eval=TRUE, MiTCR}
+#MiTCR, annotate TRA and TRB genes using the homo sapiens database. 
+MiTCR(gene="TRA", species="hs",pset="flex",output_format="txt",paired=FALSE)
+MiTCR(gene="TRB", species="hs",pset="flex",output_format="txt",paired=FALSE)
+```
+
+Finally we can easily construct an `ExpressionSet`. We'll use the TPM values from RSEM.
+```
+# For existing project load and grab data
+eset<-getExpressionSet(which="tpm")
+```
+
+## Reporting and tracking
+
+Generate a report that tells us what software was used.  
+```{r report}
+#output version info
+pipelineReport()
+```
