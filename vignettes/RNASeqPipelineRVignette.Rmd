@@ -96,9 +96,10 @@ runFastQC(ncores=2)
 ```
 
 Generate a little figure summarizing the fastQC output. 
-```{r summarize,eval=FALSE,fig.width=12,fig.height=8}
+```{r summarize,eval=FALSE,fig.width=12,fig.height=8,include=TRUE}
 #summarize FastQC results
-summarizeFastQC()
+summaryplot<-summarizeFastQC()
+print(summaryplot)
 ```
 
 ### Reference Genome
@@ -198,15 +199,7 @@ write.csv(annotations,file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_pd
 
 ### Additional analysis
 
-<!--
-Since this is paired-end data, we may want to merge the paired ends. How? We'll use the `pear` tool.
-```{r pear,eval=TRUE}
-#Run PEAR
-pear(ncores = 1) 
-```
--->
-
-Now we'll run MiTCR to annotate the short reads. 
+Now we'll run MiTCR to annotate the short reads. This shoudl be run on data merged with pear, but that doesn't work with MiTCR. 
 
 ```{r eval=TRUE, MiTCR}
 #MiTCR, annotate TRA and TRB genes using the homo sapiens database. 
@@ -218,6 +211,7 @@ Finally we can easily construct an `ExpressionSet`. We'll use the TPM values fro
 ```
 # For existing project load and grab data
 eset<-getExpressionSet(which="tpm")
+eset
 ```
 
 ## Reporting and tracking
