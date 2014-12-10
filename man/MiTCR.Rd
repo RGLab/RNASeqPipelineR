@@ -4,7 +4,7 @@
 \title{Run MiTCR on each fastQ file}
 \usage{
 MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1,
-  output_format = "text")
+  output_format = "text", paired = FALSE)
 }
 \arguments{
 \item{gene}{\code{character} c("TRB","TRA")}
@@ -18,6 +18,8 @@ MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1,
 \item{ncores}{\code{integer} number of cores for running in parallel}
 
 \item{output_format}{\code{character} either "txt" or "cls". cls files can be viewed in the MiTCR viewer. Txt files can be parsed and used to annotate libraries.}
+
+\item{paired}{\code{logical} specify whether data is paired (in which case the fastq files in PEAR directory are used). Defaults to FALSE.}
 }
 \description{
 Run the MiTCR tool on each fastQ file

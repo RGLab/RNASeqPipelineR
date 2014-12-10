@@ -49,7 +49,11 @@ dir.exists<-function (x)
 createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport=FALSE){
   project_dir <- file.path(path,project_name)
   success<-FALSE
-  if(dir.exists(normalizePath(project_dir))){
+  oldwarn<-options("warn")$warn
+  options("warn"=-1)
+  normpath<-try(normalizePath(project_dir),silent=TRUE)
+  options("warn"=oldwarn)
+  if(dir.exists(normpath)){
     #load the configuration and return
     message("Project exists, loading configuration.")
     success<-readConfig(normalizePath(project_dir))      
@@ -57,7 +61,7 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
   if(success)
     invisible()
   cmnd_prefix <- "mkdir -p "
-  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG",OUTPUT="OUTPUT")
+  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG",OUTPUT="OUTPUT",RAWANNOTATIONS="RAW_ANNOTATIONS")
   if(load_from_immport)
     dirs<-c(dirs,Tab="Tab")
   subdirs <- file.path(project_dir,dirs)
@@ -497,7 +501,7 @@ summarizeFastQC <- function(){
 buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
   if(is.null(fasta_file)|is.null(name))
     stop("You must provide a fasta_file  and a genome name")
-  if(is.null(path)&inherits(try(getConfig()[["subdirs"]][["Utils"]]),"try-error")){
+  if(is.null(path)&inherits(try(getConfig()[["subdirs"]][["Utils"]],silent=TRUE),"try-error")){
     stop("Please specify where to build the reference genome")
   }else if(is.null(path)){
     path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
@@ -536,10 +540,16 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
 #' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
 #' and read 2 is assumed to be downstream. 
-#' @param ncores \code{integer} specify how many cores to use
+#' The number of parallel_threads*bowtie_threads should not be more than the number of cores available on your system.
+#' @param parallel_threads \code{integer} specify how many parallel processes to spawn
 #' @param paired \code{logical} specify whether you have paried reads or not.
+#' @param bowtie_threads \code{integer} specify how many threads bowtie should use.
 #' @export
-RSEMCalculateExpression <- function(ncores=4,paired=FALSE){
+RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE){
+  suppressPackageStartupMessages(library(parallel))
+  if(parallel_threads*bowtie_threads>detectCores()){
+    stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores()")
+  }
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
   lr <- length(list.files(path=rsem_dir,pattern=".genes.results"))
@@ -552,7 +562,7 @@ RSEMCalculateExpression <- function(ncores=4,paired=FALSE){
     if(!paired){
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
-      command <- paste0("cd ",rsem_dir," && parallel -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",myfiles)
+      command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",myfiles)
     }else{
       keep<-paste0(keep,".fastq")
       fastq_files<-file.path(fastq_dir,keep)
@@ -565,7 +575,7 @@ RSEMCalculateExpression <- function(ncores=4,paired=FALSE){
       pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
       pairs<-cbind(pairs,basename(pairs[,1]))
       writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
-      command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",ncores," rsem-calculate-expression --bowtie2 -p 2 --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
+      command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
     }
     system(command)
   }else{
@@ -752,7 +762,7 @@ getExpressionSet <- function(which="counts"){
   matr<-as.matrix(mat[,-1,with=FALSE])
   rownames(matr)<-mat[,gene_id]
   row.names(pdata)
-  matr<-matr[,rownames(pdata)]
+  matr<-matr[,rownames(pdata),drop=FALSE]
   eset<-ExpressionSet(assayData = matr,phenoData = pdata, featureData = featuredata, annotation = getConfig()[["annotation_library"]])
   eset
 }
@@ -768,8 +778,8 @@ getExpressionSet <- function(which="counts"){
 #' @param pset \code{character} c("flex")
 #' @param ncores \code{integer} number of cores for running in parallel
 #' @param output_format \code{character} either "txt" or "cls". cls files can be viewed in the MiTCR viewer. Txt files can be parsed and used to annotate libraries.
-#' @paired \code{logical} specify whether data is paired (in which case the fastq files in PEAR directory are used). Defaults to FALSE.
-#'@export
+#' @param paired \code{logical} specify whether data is paired (in which case the fastq files in PEAR directory are used). Defaults to FALSE.
+#' @export
 MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_format="text",paired=FALSE){
   pset<-match.arg(pset,"flex")
   output_format<-match.arg(output_format,c("txt","cls"))
@@ -826,9 +836,10 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_forma
 #' 
 #' Use this as a preliminary preprocessing step to running MiTCR if you have paired-end data.
 #' @param ncores \code{integer} number of cores to use
+#' @export
 pear<-function(ncores=10){
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
-  try(pear_directory<-getConfig()[["subdirs"]][["PEAR"]])
+  pear_directory<-try(getConfig()[["subdirs"]][["PEAR"]],silent=TRUE)
   if(inherits(pear_directory,"try-eror")){
     pear_directory<-(file.path(dirname(getConfig()[["subdirs"]][["FASTQ"]]),"PEAR"))
     dir.create(pear_directory)

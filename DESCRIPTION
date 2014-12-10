@@ -7,4 +7,5 @@ Author: Raphael Gottardo and Greg Finak
 Maintainer: Greg Finak <gfinak@fhcrc.org>
 Description: Simplifies and standardizes the pipelining of RNASeq files into
     processed count matrices.
+VignetteBuilder: knitr
 License: GPL 3.0

@@ -3,10 +3,13 @@
 \alias{RSEMCalculateExpression}
 \title{Use the RSEM tool to align the reads}
 \usage{
-RSEMCalculateExpression(ncores = 4, paired = FALSE)
+RSEMCalculateExpression(parallel_threads = 2, bowtie_threads = 4,
+  paired = FALSE)
 }
 \arguments{
-\item{ncores}{\code{integer} specify how many cores to use}
+\item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}
+
+\item{bowtie_threads}{\code{integer} specify how many threads bowtie should use.}
 
 \item{paired}{\code{logical} specify whether you have paried reads or not.}
 }
@@ -18,5 +21,6 @@ Uses RSEM to align reads in FASTQ files against the reference genome. Optionally
 paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
 matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
 and read 2 is assumed to be downstream.
+The number of parallel_threads*bowtie_threads should not be more than the number of cores available on your system.
 }
 
