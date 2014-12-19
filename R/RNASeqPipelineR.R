@@ -420,6 +420,24 @@ convertSRAtoFastQ <- function(ncores=8){
   
 }
 
+#' Concatenate FastQ files
+#' Combine several fastq.gz files into one fastq.gz file for each library
+#' Decompress the fastq.gz 
+#' Copy the fastQ files into FASTQ folder
+#' @export
+#' @param infile \code{character} specify the path to the individual fastq.gz directory.
+#' @param outfile \code{character} specify the path to the FASTQ directory
+#' @param pattern \code{character} the string want to remove in the fastq.gz files name
+concatenateFastq = function(infile, outfile, pattern)
+{
+  samples <- system(paste0("ls ", infile), intern = T)
+  sample.name <- unique(sub(pattern, "", samples))
+  fastq.name <- paste0(sample.name, ".fastq.gz")
+  system(paste0("cat ", infile,  "/", sample.name, "_*.fastq.gz > ", infile, "/", fastq.name))
+  system(paste0("gunzip ", infile,  "/", fastq.name))
+  system(paste0("mv ", infile, "/*.fastq ", outfile))
+}
+
 #' Perform FastQC quality control
 #' 
 #' Runs fastqc quality control on the FASTQ files
