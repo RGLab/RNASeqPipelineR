@@ -2,10 +2,7 @@
 % Please edit documentation in R/RNASeqPipelineR.R
 \name{concatenateFastq}
 \alias{concatenateFastq}
-\title{Concatenate FastQ files
-Combine several fastq.gz files into one fastq.gz file for each library
-Decompress the fastq.gz
-Copy the fastQ files into FASTQ folder}
+\title{Concatenate FastQ files}
 \usage{
 concatenateFastq(infile, outfile, pattern)
 }
@@ -17,7 +14,6 @@ concatenateFastq(infile, outfile, pattern)
 \item{pattern}{\code{character} the string want to remove in the fastq.gz files name}
 }
 \description{
-Concatenate FastQ files
 Combine several fastq.gz files into one fastq.gz file for each library
 Decompress the fastq.gz
 Copy the fastQ files into FASTQ folder

@@ -421,6 +421,7 @@ convertSRAtoFastQ <- function(ncores=8){
 }
 
 #' Concatenate FastQ files
+#'
 #' Combine several fastq.gz files into one fastq.gz file for each library
 #' Decompress the fastq.gz 
 #' Copy the fastQ files into FASTQ folder
