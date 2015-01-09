@@ -8,7 +8,9 @@ createProject(project_name, path = ".", verbose = FALSE,
   load_from_immport = FALSE)
 }
 \arguments{
-\item{path}{\code{character} The path under which to construct the project}
+\item{project_name}{\code{character} name (ie, subdirectory) for project}
+
+\item{path}{\code{character} Root directory for project}
 
 \item{verbose}{\code{logical} Should verbose output be given?}
 
@@ -21,7 +23,7 @@ Create the skeleton for a new RNASeqPipeline project.
 }
 \details{
 createProject will create a new RNASeqPipeline
-project under directory 'name' in the path specified by 'path'.
+project under directory 'project_name' in the path specified by 'path'.
 The function creates the directory structure libraryd by RNASeqPipeline
 within the new project directory, including locations for fastQ files,
 fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
@@ -33,6 +35,8 @@ if it can find it, otherwise it will proceed to re-configure the project.
 # construct a projects skeleton in a new folder titled "myproject".
 createProject("myproject",path=".")
 createProject("myproject",path=".",verbose=TRUE)
-createProject("myproject",path=".",load_from_immport=TRUE)
+\dontrun{
+createProject("myproject",path=".",load_from_immport=TRUE) #won't work unless immport is set up
+}
 }
 

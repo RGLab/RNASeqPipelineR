@@ -8,7 +8,7 @@ buildReference(path = NULL, gtf_file = "", fasta_file = NULL,
   name = NULL)
 }
 \arguments{
-\item{path}{\code{character} specify the path to the Utils directory.}
+\item{path}{\code{character} specifying an \emph{absolute path} path to the Utils directory.}
 
 \item{gtf_file}{\code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`}
 

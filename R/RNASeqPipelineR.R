@@ -27,7 +27,7 @@ dir.exists<-function (x)
 #' Create the skeleton for a new RNASeqPipeline project.
 #' 
 #' createProject will create a new RNASeqPipeline 
-#' project under directory 'name' in the path specified by 'path'.
+#' project under directory 'project_name' in the path specified by 'path'.
 #' The function creates the directory structure libraryd by RNASeqPipeline
 #' within the new project directory, including locations for fastQ files, 
 #' fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
@@ -35,17 +35,20 @@ dir.exists<-function (x)
 #' to annotate the data utilizing the Immport schema. If the project exists, it will load the configuration 
 #' if it can find it, otherwise it will proceed to re-configure the project.
 #' 
-#' @param name \code{character} The name of the project directory
-#' @param path \code{character} The path under which to construct the project
+#' @param project_name \code{character} name (ie, subdirectory) for project
+#' @param path \code{character} Root directory for project
 #' @param verbose \code{logical} Should verbose output be given?
 #' @param load_from_immport \code{logical} Creates a 'Tab' directory for Immport tables if the data are loaded from Immport.
+#' @param name \code{character} The name of the project directory
 #' @return NULL
 #' @export
 #' @examples
 #' # construct a projects skeleton in a new folder titled "myproject".
 #' createProject("myproject",path=".")
 #' createProject("myproject",path=".",verbose=TRUE)
-#' createProject("myproject",path=".",load_from_immport=TRUE)
+#' \dontrun{
+#' createProject("myproject",path=".",load_from_immport=TRUE) #won't work unless immport is set up
+#' }
 createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport=FALSE){
   project_dir <- file.path(path,project_name)
   success<-FALSE
@@ -448,7 +451,7 @@ concatenateFastq = function(infile, outfile, pattern)
 #' @param ncores \code{integer} how many threads to use
 runFastQC <- function(ncores=8){
   fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
-  run_command <-  paste0("parallel -j ", ncores," fastqc {} -o ",getConfig()[["subdirs"]][["FASTQC"]]," -q ::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"*.fastq"))                             
+  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'*.fastq"'))                             
   if(fastQCL|length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))==0){
     out<-system(run_command)
     if(out==0){
@@ -512,7 +515,7 @@ summarizeFastQC <- function(){
 #' The command line is the default shown in the documentation.
 #' `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
 #' If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
-#' @param path \code{character} specify the path to the Utils directory.
+#' @param path \code{character} specifying an \emph{absolute path} path to the Utils directory.
 #' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`
 #' @param fasta_file \code{character} the name of the fasta file, must be specified
 #' @param name \code{character} the name of the genome output.
@@ -524,12 +527,13 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
     stop("Please specify where to build the reference genome")
   }else if(is.null(path)){
     path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
-  }else{
+  } else{
     subdirs<-getConfig()[["subdirs"]]
     subdirs[["Utils"]]<-path
     assignConfig("subdirs",subdirs) #save the user-provided path
     path = file.path(path,"Reference_Genome")
   }
+  if(substr(path, 1, 1) != '/') stop("'path' must be an absolute path")
   if(gtf_file==""){
     gtfopt<-""
     isoforms<-""
