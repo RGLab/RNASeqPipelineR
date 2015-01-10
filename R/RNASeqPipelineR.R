@@ -472,22 +472,28 @@ runFastQC <- function(ncores=8){
   }
 }
 
+.collectFastqcFiles <- function(pattern){
+  # Put the FASTQC results together
+  # List sudirs
+  fastqc_subdirs <- grep("_fastqc", list.dirs(getConfig()[["subdirs"]][["FASTQC"]], recursive = FALSE), value=TRUE)
+  # Find reports
+  sapply(fastqc_subdirs, list.files, pattern=pattern, full.names = TRUE)
+
+}
+
 #' Summarize the fastQC results
 #' 
 #' Summarize the fastqc results
 #' 
 #' Function to be run after `runFastQC` that will summarize the fastQC results
 #' and generate a plot.
-#' 
+#'
+#' @return prints a plot and invisibly returns the data.table used to generate the plot
 #' @export
 #' @import ggplot2
 summarizeFastQC <- function(){
-  # Put the FASTQC results together
-  # List sudirs
-  fastqc_subdirs <- grep("_fastqc", list.dirs(getConfig()[["subdirs"]][["FASTQC"]], recursive = FALSE), value=TRUE)
-  # Find reports
-  fastqc_summary_files <- sapply(fastqc_subdirs, list.files, pattern="summary.txt", full.names = TRUE)
-  
+ 
+  fastqc_summary_files <- .collectFastqcFiles("summary.txt")
   # Read all files and create a list of data.tables
   fastqc_list <- lapply(fastqc_summary_files, function(x, ...){
     y <- fread(x, header=FALSE);
@@ -501,9 +507,37 @@ summarizeFastQC <- function(){
   
   # Let's reorder by overall fastqc score
   fastqc_data$file <- reorder(fastqc_data$file, -fastqc_data$sum_qresult)
-  ggplot(fastqc_data, aes(x=test, y=file, fill=result))+geom_raster()+theme(axis.text.x=element_text(angle=90,hjust=1))
+  print(ggplot(fastqc_data, aes(x=test, y=file, fill=result))+geom_raster()+theme(axis.text.x=element_text(angle=90,hjust=1)))
+  invisible(fastqc_data)
   #tidy up
   #sapply(fastqc_subdirs,function(x)system(paste0("rm -rf ",x)))
+}
+
+##' Summarize duplication statistics from fastqc
+##'
+##' Prints plots of the duplication distribution and % duplication across libraries
+##' @return data.table of source data, invisbly
+##' @export
+summarizeDuplication <- function(){
+    fastqc_complete <- .collectFastqcFiles("fastqc_data.txt")
+    fastqc_list <- lapply(fastqc_complete, function(x, ...){
+        header <- read.table(x, skip=3, nrows=7, sep='\t', colClasses='character')
+        setDT(header)
+        setnames(header, c('record', 'value'))
+        setkey(header, record)
+        totaldup <- fread(x, skip='#Total Deduplicated Percentage', nrows=1, sep='\t', header=F, colClasses=c('character', 'numeric'))
+        y <- fread(x, skip='#Duplication Level', nrows=15, sep='\t', autostart=4, header=TRUE, colClasses=c('character', 'numeric', 'numeric'))        
+        setnames(y, colnames(y), c("duplication level", "pct dedup", "pct total"))
+        y[,file:=header['Filename', value]]
+        y[,totaldup:=100-totaldup[1,2,with=FALSE]]
+        return(y)})
+    fastqc_data <- rbindlist(fastqc_list, fill=TRUE)
+    fastqc_data[,`duplication level`:=factor(`duplication level`, levels=c(1:9, c('>10', '>50', '>100', '>500', '>1k', '>5k')))]
+    M <- data.table:::melt.data.table(fastqc_data, measure.vars=c('pct dedup', 'pct total'))
+    print(ggplot(M, aes(x=`duplication level`, y=value))+geom_boxplot() + facet_wrap(~variable))
+    U <- unique(fastqc_data[,list(file, totaldup)])
+    print(ggplot(U, aes(x=totaldup)) + geom_density() + geom_text(aes(x=totaldup, y=0, label=file), size=2, angle=90, hjust=0))
+    invisible(fastqc_data)
 }
 
 #' Build a reference genome
@@ -585,7 +619,7 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
     if(!paired){
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
-      command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",myfiles)
+      command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
     }else{
       keep<-paste0(keep,".fastq")
       fastq_files<-file.path(fastq_dir,keep)
@@ -600,6 +634,7 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
       command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
     }
+    cat(command)
     system(command)
   }else{
     message("Expression already calculated")
