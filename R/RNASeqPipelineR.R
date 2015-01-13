@@ -602,7 +602,7 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param paired \code{logical} specify whether you have paried reads or not.
 #' @param bowtie_threads \code{integer} specify how many threads bowtie should use.
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE){
+RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE, frag_mean=NULL, frag_sd=NULL){
   suppressPackageStartupMessages(library(parallel))
   if(parallel_threads*bowtie_threads>detectCores()){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores()")
@@ -619,8 +619,13 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
     if(!paired){
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
-      command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
-    }else{
+      if(!is.null(frag_mean) && !is.null(frag_sd)){
+          fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
+      } else{
+          fragLenArg <- ''
+      }
+                command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads, fragLenArg, " {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
+    }else{                              #unpaired
       keep<-paste0(keep,".fastq")
       fastq_files<-file.path(fastq_dir,keep)
       #fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
@@ -632,6 +637,11 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
       pairs<-cbind(pairs,basename(pairs[,1]))
       writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
+
+      if(!is.null(frag_mean) || !is.null(frag_sd)){
+          warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
+      }
+      
       command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
     }
     cat(command)
