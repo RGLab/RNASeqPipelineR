@@ -875,7 +875,7 @@ getDataFromSRX<-function(x=NULL){
     stop("Please pass a vector of SRX numbers.")
   }
   sra_con<-getConfig()[["sra_con"]]
-  run_accession <- listSRAfile(SRX_number, sra_con, fileType = "sra" )$run
+  run_accession <- listSRAfile(x, sra_con, fileType = "sra" )$run
   aspera_url <- paste0("anonftp@ftp.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra", "/", substr(run_accession,1,3), "/", substr(run_accession,1,6), "/", run_accession, "/", run_accession, ".sra")
   out<-paste0('ascp -i ',gsub(" ","\\\\ ",getConfig()[["aspera_path"]]),'/asperaweb_id_dsa.openssh -k 1 -T -l200m ', aspera_url, " ",getConfig()[["subdirs"]][["SRA"]])
   for(i in out){
