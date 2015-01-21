@@ -934,8 +934,7 @@ pear<-function(ncores=4){
   command<-paste0("cd ", fastq_dir, " && parallel -j ",ncores, " -n2 pear -f {1} -r {2} -o ",file.path(pear_directory,"{1}")," :::: < ",file.path(pear_directory,"pear_arguments.txt"))
   system(command)
 }
-<<<<<<< HEAD
-=======
+
 
 #' Download SRA files from SRX accessions
 #' 
@@ -990,4 +989,3 @@ annotationsFromSRX<-function(x){
   message("Wrote pData to RSEM/rsem_pdata.csv")
   annotations
 }
->>>>>>> master
