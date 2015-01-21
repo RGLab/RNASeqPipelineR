@@ -18,7 +18,6 @@ Imports:
 	knitr,
 	annotate,
 	clue
-Suggests:
 	org.Hs.eg.db,
 	pander,
 	parallel,

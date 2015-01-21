@@ -579,6 +579,9 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
     isoformsOpt<-"--transcript-to-gene-map"
   }
   #check if the reference genome has already been built
+  if(length(fasta_file)>1){
+    fasta_file<-paste(fasta_file,collapse=",")
+  }
   if(length(list.files(pattern=paste0(name,".chrlist"),path=file.path(getConfig()[["subdirs"]]["Utils"],"Reference_Genome")))==0){
     command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoforms," --bowtie2 ",fasta_file," ",name," ")
     system(command)
@@ -931,3 +934,60 @@ pear<-function(ncores=4){
   command<-paste0("cd ", fastq_dir, " && parallel -j ",ncores, " -n2 pear -f {1} -r {2} -o ",file.path(pear_directory,"{1}")," :::: < ",file.path(pear_directory,"pear_arguments.txt"))
   system(command)
 }
+<<<<<<< HEAD
+=======
+
+#' Download SRA files from SRX accessions
+#' 
+#' Download SRA files from SRX accessions. Downloads asynchronously. Won't message you when complete, so can't be run in 
+#' batch mode at the moment.
+#' @param x \code{character} a vector of SRX accession numbers
+#' @export
+getDataFromSRX<-function(x=NULL){
+  if(is.null(x)){
+    stop("Please pass a vector of SRX numbers.")
+  }
+  sra_con<-getConfig()[["sra_con"]]
+  run_accession <- listSRAfile(x, sra_con, fileType = "sra" )$run
+  aspera_url <- paste0("anonftp@ftp.ncbi.nlm.nih.gov:/sra/sra-instant/reads/ByRun/sra", "/", substr(run_accession,1,3), "/", substr(run_accession,1,6), "/", run_accession, "/", run_accession, ".sra")
+  out<-paste0('ascp -i ',gsub(" ","\\\\ ",getConfig()[["aspera_path"]]),'/asperaweb_id_dsa.openssh -k 1 -T -l200m ', aspera_url, " ",getConfig()[["subdirs"]][["SRA"]])
+  for(i in out){
+    system(i,wait=FALSE)
+  }
+  message("Files are downloading. Wait and check your downloads before proceeding")
+}
+
+#'Quick and dirty annotations from SRAmetadb
+#'
+#'Gets annotations for SRR files based on SRAmetadb contents
+#'@param x \code{character} vector of SRX accessions
+#'@import plyr dplyr
+#'@export
+annotationsFromSRX<-function(x){
+  samples<-data.table(listSRAfile(x,getConfig()[["sra_con"]]))
+  setnames(samples,"sample","sample_accession")
+  
+  src<-src_sqlite(getConfig()[["sra_con"]]@dbname, create = F)
+  sample_table<-tbl(src, sql("SELECT * FROM sample"))
+  
+  pdata<-merge(data.table(as.data.frame(filter(sample_table,sample_accession%in%samples$sample_accession))),samples,by="sample_accession")
+  pdata<-select(pdata,sample_accession,experiment,run,sample_attribute)
+  
+  attributes<-strsplit(pdata$sample_attribute,"\\|\\|")
+  names(attributes)<-pdata$run
+  attributes<-lapply(attributes,function(x)t(cbind(x)))
+  annotations<-ldply(lapply(attributes,function(x){
+    column_names<-gsub("(^.+?):.*","\\1",x)
+    matrix_entries<-gsub(" +$","",gsub("^ +","",gsub("^.+?:(.*)","\\1",x)))
+    colnames(matrix_entries)<-column_names
+    matrix_entries
+  }))
+  setnames(annotations,".id","run")
+  annotations<-merge(pdata,annotations,by="run")
+  annotations[,sample_attribute:=NULL]
+  setnames(annotations,"run","srr")
+  write.csv(annotations, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_pdata.csv"), row.names=FALSE) 
+  message("Wrote pData to RSEM/rsem_pdata.csv")
+  annotations
+}
+>>>>>>> master
