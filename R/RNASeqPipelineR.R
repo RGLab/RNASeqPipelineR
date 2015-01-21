@@ -522,6 +522,9 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
     isoformsOpt<-"--transcript-to-gene-map"
   }
   #check if the reference genome has already been built
+  if(length(fasta_file)>1){
+    fasta_file<-paste(fasta_file,collapse=",")
+  }
   if(length(list.files(pattern=paste0(name,".chrlist"),path=file.path(getConfig()[["subdirs"]]["Utils"],"Reference_Genome")))==0){
     command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoforms," --bowtie2 ",fasta_file," ",name," ")
     system(command)
@@ -888,6 +891,7 @@ getDataFromSRX<-function(x=NULL){
 #'
 #'Gets annotations for SRR files based on SRAmetadb contents
 #'@param x \code{character} vector of SRX accessions
+#'@import plyr dplyr
 #'@export
 annotationsFromSRX<-function(x){
   samples<-data.table(listSRAfile(x,getConfig()[["sra_con"]]))
