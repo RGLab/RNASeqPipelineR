@@ -27,7 +27,7 @@ dir.exists<-function (x)
 #' Create the skeleton for a new RNASeqPipeline project.
 #' 
 #' createProject will create a new RNASeqPipeline 
-#' project under directory 'name' in the path specified by 'path'.
+#' project under directory 'project_name' in the path specified by 'path'.
 #' The function creates the directory structure libraryd by RNASeqPipeline
 #' within the new project directory, including locations for fastQ files, 
 #' fastQC output, RSEM quantification, and optionally GEO and SRA files if the data
@@ -35,17 +35,20 @@ dir.exists<-function (x)
 #' to annotate the data utilizing the Immport schema. If the project exists, it will load the configuration 
 #' if it can find it, otherwise it will proceed to re-configure the project.
 #' 
-#' @param name \code{character} The name of the project directory
-#' @param path \code{character} The path under which to construct the project
+#' @param project_name \code{character} name (ie, subdirectory) for project
+#' @param path \code{character} Root directory for project
 #' @param verbose \code{logical} Should verbose output be given?
 #' @param load_from_immport \code{logical} Creates a 'Tab' directory for Immport tables if the data are loaded from Immport.
+#' @param name \code{character} The name of the project directory
 #' @return NULL
 #' @export
 #' @examples
 #' # construct a projects skeleton in a new folder titled "myproject".
 #' createProject("myproject",path=".")
 #' createProject("myproject",path=".",verbose=TRUE)
-#' createProject("myproject",path=".",load_from_immport=TRUE)
+#' \dontrun{
+#' createProject("myproject",path=".",load_from_immport=TRUE) #won't work unless immport is set up
+#' }
 createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport=FALSE){
   project_dir <- file.path(path,project_name)
   success<-FALSE
@@ -420,6 +423,25 @@ convertSRAtoFastQ <- function(ncores=8){
   
 }
 
+#' Concatenate FastQ files
+#'
+#' Combine several fastq.gz files into one fastq.gz file for each library
+#' Decompress the fastq.gz 
+#' Copy the fastQ files into FASTQ folder
+#' @export
+#' @param infile \code{character} specify the path to the individual fastq.gz directory.
+#' @param outfile \code{character} specify the path to the FASTQ directory
+#' @param pattern \code{character} the string want to remove in the fastq.gz files name
+concatenateFastq = function(infile, outfile, pattern)
+{
+  samples <- system(paste0("ls ", infile), intern = T)
+  sample.name <- unique(sub(pattern, "", samples))
+  fastq.name <- paste0(sample.name, ".fastq.gz")
+  system(paste0("cat ", infile,  "/", sample.name, "_*.fastq.gz > ", infile, "/", fastq.name))
+  system(paste0("gunzip ", infile,  "/", fastq.name))
+  system(paste0("mv ", infile, "/*.fastq ", outfile))
+}
+
 #' Perform FastQC quality control
 #' 
 #' Runs fastqc quality control on the FASTQ files
@@ -429,7 +451,7 @@ convertSRAtoFastQ <- function(ncores=8){
 #' @param ncores \code{integer} how many threads to use
 runFastQC <- function(ncores=8){
   fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
-  run_command <-  paste0("parallel -j ", ncores," fastqc {} -o ",getConfig()[["subdirs"]][["FASTQC"]]," -q ::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"*.fastq"))                             
+  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'*.fastq"'))                             
   if(fastQCL|length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))==0){
     out<-system(run_command)
     if(out==0){
@@ -450,22 +472,28 @@ runFastQC <- function(ncores=8){
   }
 }
 
+.collectFastqcFiles <- function(pattern){
+  # Put the FASTQC results together
+  # List sudirs
+  fastqc_subdirs <- grep("_fastqc", list.dirs(getConfig()[["subdirs"]][["FASTQC"]], recursive = FALSE), value=TRUE)
+  # Find reports
+  sapply(fastqc_subdirs, list.files, pattern=pattern, full.names = TRUE)
+
+}
+
 #' Summarize the fastQC results
 #' 
 #' Summarize the fastqc results
 #' 
 #' Function to be run after `runFastQC` that will summarize the fastQC results
 #' and generate a plot.
-#' 
+#'
+#' @return prints a plot and invisibly returns the data.table used to generate the plot
 #' @export
 #' @import ggplot2
 summarizeFastQC <- function(){
-  # Put the FASTQC results together
-  # List sudirs
-  fastqc_subdirs <- grep("_fastqc", list.dirs(getConfig()[["subdirs"]][["FASTQC"]], recursive = FALSE), value=TRUE)
-  # Find reports
-  fastqc_summary_files <- sapply(fastqc_subdirs, list.files, pattern="summary.txt", full.names = TRUE)
-  
+ 
+  fastqc_summary_files <- .collectFastqcFiles("summary.txt")
   # Read all files and create a list of data.tables
   fastqc_list <- lapply(fastqc_summary_files, function(x, ...){
     y <- fread(x, header=FALSE);
@@ -479,9 +507,37 @@ summarizeFastQC <- function(){
   
   # Let's reorder by overall fastqc score
   fastqc_data$file <- reorder(fastqc_data$file, -fastqc_data$sum_qresult)
-  ggplot(fastqc_data, aes(x=test, y=file, fill=result))+geom_raster()+theme(axis.text.x=element_text(angle=90,hjust=1))
+  print(ggplot(fastqc_data, aes(x=test, y=file, fill=result))+geom_raster()+theme(axis.text.x=element_text(angle=90,hjust=1)))
+  invisible(fastqc_data)
   #tidy up
   #sapply(fastqc_subdirs,function(x)system(paste0("rm -rf ",x)))
+}
+
+##' Summarize duplication statistics from fastqc
+##'
+##' Prints plots of the duplication distribution and % duplication across libraries
+##' @return data.table of source data, invisbly
+##' @export
+summarizeDuplication <- function(){
+    fastqc_complete <- .collectFastqcFiles("fastqc_data.txt")
+    fastqc_list <- lapply(fastqc_complete, function(x, ...){
+        header <- read.table(x, skip=3, nrows=7, sep='\t', colClasses='character')
+        setDT(header)
+        setnames(header, c('record', 'value'))
+        setkey(header, record)
+        totaldup <- fread(x, skip='#Total Deduplicated Percentage', nrows=1, sep='\t', header=F, colClasses=c('character', 'numeric'))
+        y <- fread(x, skip='#Duplication Level', nrows=15, sep='\t', autostart=4, header=TRUE, colClasses=c('character', 'numeric', 'numeric'))        
+        setnames(y, colnames(y), c("duplication level", "pct dedup", "pct total"))
+        y[,file:=header['Filename', value]]
+        y[,totaldup:=100-totaldup[1,2,with=FALSE]]
+        return(y)})
+    fastqc_data <- rbindlist(fastqc_list, fill=TRUE)
+    fastqc_data[,`duplication level`:=factor(`duplication level`, levels=c(1:9, c('>10', '>50', '>100', '>500', '>1k', '>5k')))]
+    M <- data.table:::melt.data.table(fastqc_data, measure.vars=c('pct dedup', 'pct total'))
+    print(ggplot(M, aes(x=`duplication level`, y=value))+geom_boxplot() + facet_wrap(~variable))
+    U <- unique(fastqc_data[,list(file, totaldup)])
+    print(ggplot(U, aes(x=totaldup)) + geom_density() + geom_text(aes(x=totaldup, y=0, label=file), size=2, angle=90, hjust=0))
+    invisible(fastqc_data)
 }
 
 #' Build a reference genome
@@ -493,7 +549,7 @@ summarizeFastQC <- function(){
 #' The command line is the default shown in the documentation.
 #' `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
 #' If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
-#' @param path \code{character} specify the path to the Utils directory.
+#' @param path \code{character} specifying an \emph{absolute path} path to the Utils directory.
 #' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`
 #' @param fasta_file \code{character} the name of the fasta file, must be specified
 #' @param name \code{character} the name of the genome output.
@@ -505,12 +561,13 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
     stop("Please specify where to build the reference genome")
   }else if(is.null(path)){
     path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
-  }else{
+  } else{
     subdirs<-getConfig()[["subdirs"]]
     subdirs[["Utils"]]<-path
     assignConfig("subdirs",subdirs) #save the user-provided path
     path = file.path(path,"Reference_Genome")
   }
+  if(substr(path, 1, 1) != '/') stop("'path' must be an absolute path")
   if(gtf_file==""){
     gtfopt<-""
     isoforms<-""
@@ -548,7 +605,7 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param paired \code{logical} specify whether you have paried reads or not.
 #' @param bowtie_threads \code{integer} specify how many threads bowtie should use.
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE){
+RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE, frag_mean=NULL, frag_sd=NULL){
   suppressPackageStartupMessages(library(parallel))
   if(parallel_threads*bowtie_threads>detectCores()){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores()")
@@ -565,8 +622,13 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
     if(!paired){
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
-      command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ",myfiles)
-    }else{
+      if(!is.null(frag_mean) && !is.null(frag_sd)){
+          fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
+      } else{
+          fragLenArg <- ''
+      }
+                command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads, fragLenArg, " {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
+    }else{                              #unpaired
       keep<-paste0(keep,".fastq")
       fastq_files<-file.path(fastq_dir,keep)
       #fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
@@ -578,8 +640,14 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
       pairs<-cbind(pairs,basename(pairs[,1]))
       writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
+
+      if(!is.null(frag_mean) || !is.null(frag_sd)){
+          warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
+      }
+      
       command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
     }
+    cat(command)
     system(command)
   }else{
     message("Expression already calculated")
@@ -866,6 +934,8 @@ pear<-function(ncores=4){
   command<-paste0("cd ", fastq_dir, " && parallel -j ",ncores, " -n2 pear -f {1} -r {2} -o ",file.path(pear_directory,"{1}")," :::: < ",file.path(pear_directory,"pear_arguments.txt"))
   system(command)
 }
+<<<<<<< HEAD
+=======
 
 #' Download SRA files from SRX accessions
 #' 
@@ -920,3 +990,4 @@ annotationsFromSRX<-function(x){
   message("Wrote pData to RSEM/rsem_pdata.csv")
   annotations
 }
+>>>>>>> master

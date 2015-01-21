@@ -1,12 +1,24 @@
 Package: RNASeqPipelineR
 Type: Package
-Title: Constrcut Standardized pipelines for processing RNASeq data.
-Version: 0.2
-Date: 2014-11-12
+Title: Construct Standardized pipelines for processing RNASeq data.
+Version: 0.23
+Date: 2014-01-08
 Author: Raphael Gottardo and Greg Finak
 Maintainer: Greg Finak <gfinak@fhcrc.org>
 Description: Simplifies and standardizes the pipelining of RNASeq files into
     processed count matrices.
 VignetteBuilder: knitr
-Imports: GEOquery, RSQLite, SRAdb, data.table, ggplot2, knitr
-License: GPL 3.0
+License: GPL(>=3.0)
+Imports:
+	GEOquery,
+	RSQLite,
+	SRAdb,
+	data.table,
+	ggplot2,
+	knitr,
+	annotate,
+	clue
+	org.Hs.eg.db,
+	pander,
+	parallel,
+	plyr
