@@ -883,3 +883,36 @@ getDataFromSRX<-function(x=NULL){
   }
   message("Files are downloading. Wait and check your downloads before proceeding")
 }
+
+#'Quick and dirty annotations from SRAmetadb
+#'
+#'Gets annotations for SRR files based on SRAmetadb contents
+#'@param x \code{character} vector of SRX accessions
+#'@export
+annotationsFromSRX<-function(x){
+  samples<-data.table(listSRAfile(x,getConfig()[["sra_con"]]))
+  setnames(samples,"sample","sample_accession")
+  
+  src<-src_sqlite(getConfig()[["sra_con"]]@dbname, create = F)
+  sample_table<-tbl(src, sql("SELECT * FROM sample"))
+  
+  pdata<-merge(data.table(as.data.frame(filter(sample_table,sample_accession%in%samples$sample_accession))),samples,by="sample_accession")
+  pdata<-select(pdata,sample_accession,experiment,run,sample_attribute)
+  
+  attributes<-strsplit(pdata$sample_attribute,"\\|\\|")
+  names(attributes)<-pdata$run
+  attributes<-lapply(attributes,function(x)t(cbind(x)))
+  annotations<-ldply(lapply(attributes,function(x){
+    column_names<-gsub("(^.+?):.*","\\1",x)
+    matrix_entries<-gsub(" +$","",gsub("^ +","",gsub("^.+?:(.*)","\\1",x)))
+    colnames(matrix_entries)<-column_names
+    matrix_entries
+  }))
+  setnames(annotations,".id","run")
+  annotations<-merge(pdata,annotations,by="run")
+  annotations[,sample_attribute:=NULL]
+  setnames(annotations,"run","srr")
+  write.csv(annotations, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_pdata.csv"), row.names=FALSE) 
+  message("Wrote pData to RSEM/rsem_pdata.csv")
+  annotations
+}
