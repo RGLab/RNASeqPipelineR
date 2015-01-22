@@ -612,13 +612,13 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
   }
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
-  lr <- length(list.files(path=rsem_dir,pattern=".genes.results"))
-  lq <- length(list.files(path=fastq_dir,pattern=".fastq"))
+  lr <- length(list.files(path=rsem_dir,pattern="\\.genes\\.results$"))
+  lq <- length(list.files(path=fastq_dir,pattern="\\.fastq$"))
   reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   if(lr!=lq){
     #do a set difference
-    keep<-setdiff(gsub("\\.fastq","",list.files(path=fastq_dir,pattern=".fastq")),gsub("\\.genes\\.results","",list.files(path=rsem_dir,pattern=".genes.results")))    
+    keep<-setdiff(gsub("\\.fastq","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
     if(!paired){
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
@@ -638,7 +638,7 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       pairs<-solve_LSAP(D)
       pairs<-matrix(fastq_files[pairs],ncol=2,byrow=TRUE)
       pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
-      pairs<-cbind(pairs,basename(pairs[,1]))
+      pairs<-cbind(pairs,gsub("_[12]\\.","\\.",basename(pairs[,1])))
       writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
 
       if(!is.null(frag_mean) || !is.null(frag_sd)){
