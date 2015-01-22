@@ -660,9 +660,9 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
 #' 
 #' Assemble an expression matrix from the individual libraries.
 #'@export 
-RSEMAssembleExpressionMatrix <- function(){
+RSEMAssembleExpressionMatrix <- function(force=FALSE){
   cond_eval <- length(list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="rsem_"))<4
-  if(cond_eval){
+  if(cond_eval|force){
     message("Assembling counts matrix")
     rsem_files <- list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="genes.results", full.names = TRUE)
     # Read all files and create a list of data.tables
@@ -705,7 +705,7 @@ RSEMAssembleExpressionMatrix <- function(){
 #' @param annotation_library \code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.
 #' @param force \code{logical} force the annotation step to re-run
 #' @export
-BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE){
+BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE,lib="org.Hs.eg.db"){
   featuredata_outfile<-"rsem_fdata.csv"
   if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
     message("Annotation already done, skipping. Use force=TRUE to rerun.")
@@ -715,7 +715,7 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   #save the annotation library
   assignConfig("annotation_library",annotation_library)
   library(annotate)
-  library(org.Hs.eg.db)
+  eval(as.call(list(library,as.name(lib))))
   message("Annotating transcripts.")
   txdb <- get(annotation_library)
   rsem_txs_table <- fread(file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_txs_table.csv"))
@@ -724,11 +724,11 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   tx_to_gid <- rsem_txs_table[,list(transcript_id=strsplit(as.character(transcript_ids),",")[[1]]),by="gene_id"]
   
   # map the transcripts to entrez gene ids
-  tx_to_eid <- data.table(select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
+  tx_to_eid <- data.table(AnnotationDbi:::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
   setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
   
   # Add gene symbol
-  tx_to_eid[!is.na(entrez_id),gene_symbol:=getSYMBOL(tx_to_eid[!is.na(entrez_id),entrez_id], data='org.Hs.eg')]
+  tx_to_eid[!is.na(entrez_id),gene_symbol:=getSYMBOL(tx_to_eid[!is.na(entrez_id),entrez_id], data=gsub("\\.db","",lib))]
   
   # merge all to map information to RSEM gene_ids
   tx_table <- merge(tx_to_gid, tx_to_eid, by="transcript_id")
