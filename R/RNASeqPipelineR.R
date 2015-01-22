@@ -618,7 +618,7 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   if(lr!=lq){
     #do a set difference
-    keep<-setdiff(gsub("\\.fastq","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
+    keep<-setdiff(gsub("_[12]\\.fastq","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
     if(!paired){
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
@@ -629,16 +629,18 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       }
                 command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads, fragLenArg, " {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
     }else{                              #unpaired
-      keep<-paste0(keep,".fastq")
-      fastq_files<-file.path(fastq_dir,keep)
+      keep0<-keep
+      keep<-paste0(keep0,"_1.fastq")
+      keep<-c(keep,paste0(keep0,"_2.fastq"))
+      fastq_files<-file.path(fastq_dir,sort(keep))
       #fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
-      library(clue)
-      D<-adist(fastq_files)
-      diag(D)<-1e20
-      pairs<-solve_LSAP(D)
-      pairs<-matrix(fastq_files[pairs],ncol=2,byrow=TRUE)
-      pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
-      pairs<-cbind(pairs,gsub("_[12]\\.","\\.",basename(pairs[,1])))
+      #library(clue)
+      #D<-adist(fastq_files)
+      #diag(D)<-1e20
+      #pairs<-solve_LSAP(D)
+      pairs<-matrix(fastq_files,ncol=2,byrow=TRUE)
+      #pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
+      pairs<-cbind(pairs,gsub("\\.fastq","",gsub("_[12]\\.","\\.",basename(pairs[,1]))))
       writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
 
       if(!is.null(frag_mean) || !is.null(frag_sd)){
