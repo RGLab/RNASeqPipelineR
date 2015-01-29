@@ -651,7 +651,7 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       if(slurm){
         con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
         command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))        
-        ram_requested<-parallel_threads*1000
+        ram_requested<-parallel_threads*ram_per_node
         writeLines(c("#!/bin/bash\n",
                      paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
                      "#SBATCH -N 1                 # Ensure that all cores are on one machine",
@@ -694,7 +694,7 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
         command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
         #Before writing the command we need to  preamble for the slurm job
         # We'll request 1Gb of RAM per parallel thread per node
-        ram_requested<-parallel_threads*1000
+        ram_requested<-parallel_threads*ram_per_node
         writeLines(c("#!/bin/bash\n",
                      paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
                      "#SBATCH -N 1                 # Ensure that all cores are on one machine",
