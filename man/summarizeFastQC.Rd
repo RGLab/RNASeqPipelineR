@@ -6,6 +6,9 @@
 \usage{
 summarizeFastQC()
 }
+\value{
+prints a plot and invisibly returns the data.table used to generate the plot
+}
 \description{
 Summarize the fastqc results
 }

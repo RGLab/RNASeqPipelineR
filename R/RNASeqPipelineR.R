@@ -478,7 +478,7 @@ runFastQC <- function(ncores=8){
   fastqc_subdirs <- grep("_fastqc", list.dirs(getConfig()[["subdirs"]][["FASTQC"]], recursive = FALSE), value=TRUE)
   # Find reports
   sapply(fastqc_subdirs, list.files, pattern=pattern, full.names = TRUE)
-
+  
 }
 
 #' Summarize the fastQC results
@@ -492,7 +492,7 @@ runFastQC <- function(ncores=8){
 #' @export
 #' @import ggplot2
 summarizeFastQC <- function(){
- 
+  
   fastqc_summary_files <- .collectFastqcFiles("summary.txt")
   # Read all files and create a list of data.tables
   fastqc_list <- lapply(fastqc_summary_files, function(x, ...){
@@ -519,25 +519,25 @@ summarizeFastQC <- function(){
 ##' @return data.table of source data, invisbly
 ##' @export
 summarizeDuplication <- function(){
-    fastqc_complete <- .collectFastqcFiles("fastqc_data.txt")
-    fastqc_list <- lapply(fastqc_complete, function(x, ...){
-        header <- read.table(x, skip=3, nrows=7, sep='\t', colClasses='character')
-        setDT(header)
-        setnames(header, c('record', 'value'))
-        setkey(header, record)
-        totaldup <- fread(x, skip='#Total Deduplicated Percentage', nrows=1, sep='\t', header=F, colClasses=c('character', 'numeric'))
-        y <- fread(x, skip='#Duplication Level', nrows=15, sep='\t', autostart=4, header=TRUE, colClasses=c('character', 'numeric', 'numeric'))        
-        setnames(y, colnames(y), c("duplication level", "pct dedup", "pct total"))
-        y[,file:=header['Filename', value]]
-        y[,totaldup:=100-totaldup[1,2,with=FALSE]]
-        return(y)})
-    fastqc_data <- rbindlist(fastqc_list, fill=TRUE)
-    fastqc_data[,`duplication level`:=factor(`duplication level`, levels=c(1:9, c('>10', '>50', '>100', '>500', '>1k', '>5k')))]
-    M <- data.table:::melt.data.table(fastqc_data, measure.vars=c('pct dedup', 'pct total'))
-    print(ggplot(M, aes(x=`duplication level`, y=value))+geom_boxplot() + facet_wrap(~variable))
-    U <- unique(fastqc_data[,list(file, totaldup)])
-    print(ggplot(U, aes(x=totaldup)) + geom_density() + geom_text(aes(x=totaldup, y=0, label=file), size=2, angle=90, hjust=0))
-    invisible(fastqc_data)
+  fastqc_complete <- .collectFastqcFiles("fastqc_data.txt")
+  fastqc_list <- lapply(fastqc_complete, function(x, ...){
+    header <- read.table(x, skip=3, nrows=7, sep='\t', colClasses='character')
+    setDT(header)
+    setnames(header, c('record', 'value'))
+    setkey(header, record)
+    totaldup <- fread(x, skip='#Total Deduplicated Percentage', nrows=1, sep='\t', header=F, colClasses=c('character', 'numeric'))
+    y <- fread(x, skip='#Duplication Level', nrows=15, sep='\t', autostart=4, header=TRUE, colClasses=c('character', 'numeric', 'numeric'))        
+    setnames(y, colnames(y), c("duplication level", "pct dedup", "pct total"))
+    y[,file:=header['Filename', value]]
+    y[,totaldup:=100-totaldup[1,2,with=FALSE]]
+    return(y)})
+  fastqc_data <- rbindlist(fastqc_list, fill=TRUE)
+  fastqc_data[,`duplication level`:=factor(`duplication level`, levels=c(1:9, c('>10', '>50', '>100', '>500', '>1k', '>5k')))]
+  M <- data.table:::melt.data.table(fastqc_data, measure.vars=c('pct dedup', 'pct total'))
+  print(ggplot(M, aes(x=`duplication level`, y=value))+geom_boxplot() + facet_wrap(~variable))
+  U <- unique(fastqc_data[,list(file, totaldup)])
+  print(ggplot(U, aes(x=totaldup)) + geom_density() + geom_text(aes(x=totaldup, y=0, label=file), size=2, angle=90, hjust=0))
+  invisible(fastqc_data)
 }
 
 #' Build a reference genome
@@ -604,11 +604,26 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param parallel_threads \code{integer} specify how many parallel processes to spawn
 #' @param paired \code{logical} specify whether you have paried reads or not.
 #' @param bowtie_threads \code{integer} specify how many threads bowtie should use.
+#' @param nchunks \code{integer} number of chunks to split the files for a slurm job. Ignored if slurm = FALSE
+#' @param days_requested \code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE
+#' @param slurm \code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments. 
+#' @param slurm_partition \code{character} the slurm partition to submit to. Ignored if slurm=FALSE
+#' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE, frag_mean=NULL, frag_sd=NULL){
+RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=4,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=1000){
+  ncores<-parallel_threads*bowtie_threads
   suppressPackageStartupMessages(library(parallel))
-  if(parallel_threads*bowtie_threads>detectCores()){
-    stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores()")
+  if(ncores>detectCores()&!slurm){
+    stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
+  }
+  if(!slurm){
+    #If we aren't using slurm, set the number of chunks to one.
+    nchunks<-1
+  }
+  #Chunking for slurm
+  .chunkDataFrame<-function(df=pairs,nchunks=nchunks){        
+    groupsize<-nrow(df)%/%nchunks
+    split(as.data.frame(df),gl(nchunks,groupsize,length=nrow(df)))
   }
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
@@ -617,37 +632,86 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
   reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   if(lr!=lq){
-    #do a set difference
-    keep<-setdiff(gsub("_[12]\\.fastq","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
     if(!paired){
+      keep<-setdiff(list.files(path=fastq_dir,pattern="\\.fastq$"),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
+      #Single-end
       keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
       if(!is.null(frag_mean) && !is.null(frag_sd)){
-          fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
+        fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
       } else{
-          fragLenArg <- ''
+        fragLenArg <- ''
       }
-                command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads, fragLenArg, " {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
-    }else{                              #unpaired
+      
+      chunked<-.chunkDataFrame(data.frame(files=myfiles),nchunks)
+      #TODO rewrite to use arguments file
+      for(i in seq_along(chunked)){
+        writeLines(t(chunked[[i]]),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt"))))
+      }
+      if(slurm){
+        con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
+        command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))        
+        ram_requested<-parallel_threads*1000
+        writeLines(c("#!/bin/bash\n",
+                     paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
+                     "#SBATCH -N 1                 # Ensure that all cores are on one machine",
+                     paste0("#SBATCH -t ",days_requested,"-00:00           # Runtime in D-HH:MM"),
+                     paste0("#SBATCH -p ",slurm_partition,"    # Partition to submit to"),
+                     paste0("#SBATCH --mem=",ram_requested,"            # Memory pool for all cores (see also --mem-per-cpu)"),
+                     paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.out"),"      # File to which STDOUT will be written"),
+                     paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.err"),"     # File to which STDERR will be written")),con=con)
+        
+        writeLines(paste0(command,"\n"),con=con)      
+        close(con)
+        #Now the command to launch the job is sbatch batchSubmitJob.sh
+        command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))   
+      }else{
+        command <- paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ",bowtie_threads, fragLenArg, " {} ",file.path(reference_genome_path,reference_genome_name)," {/.} ::: ", paste(myfiles, collapse=' '))
+      }
+    }else{
+      #Paired end
+      keep<-setdiff(gsub("_[12]\\.fastq","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
       keep0<-keep
       keep<-paste0(keep0,"_1.fastq")
       keep<-c(keep,paste0(keep0,"_2.fastq"))
       fastq_files<-file.path(fastq_dir,sort(keep))
-      #fastq_files<-list.files(fastq_dir,"*.fastq",full=TRUE)
-      #library(clue)
-      #D<-adist(fastq_files)
-      #diag(D)<-1e20
-      #pairs<-solve_LSAP(D)
       pairs<-matrix(fastq_files,ncol=2,byrow=TRUE)
-      #pairs <- t(apply(pairs,1,sort)) #Sort rows lexicographically, assumption is that they differ by numeric index 1, 2, for paired reads
       pairs<-cbind(pairs,gsub("\\.fastq","",gsub("_[12]\\.","\\.",basename(pairs[,1]))))
-      writeLines(t(pairs),con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt")))
-
-      if(!is.null(frag_mean) || !is.null(frag_sd)){
-          warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
+      #TODO enable chunking for slurm
+      chunked<-.chunkDataFrame(pairs,nchunks)
+      for(i in seq_along(chunked)){
+        con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt")))
+        writeLines(t(chunked[[i]]),con=con)
+        close(con)
       }
       
-      command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"arguments.txt"))
+      if(!is.null(frag_mean) || !is.null(frag_sd)){
+        warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
+      }
+      if(slurm){
+        #With chunking enabled this is meant to be submitted as a slurm batch job with the --array option set to 1-nchunks
+        con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
+        command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
+        #Before writing the command we need to  preamble for the slurm job
+        # We'll request 1Gb of RAM per parallel thread per node
+        ram_requested<-parallel_threads*1000
+        writeLines(c("#!/bin/bash\n",
+                     paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
+                     "#SBATCH -N 1                 # Ensure that all cores are on one machine",
+                     paste0("#SBATCH -t ",days_requested,"-00:00           # Runtime in D-HH:MM"),
+                     paste0("#SBATCH -p ",slurm_partition,"    # Partition to submit to"),
+                     paste0("#SBATCH --mem=",ram_requested,"            # Memory pool for all cores (see also --mem-per-cpu)"),
+                     paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.out"),"      # File to which STDOUT will be written"),
+                     paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.err"),"      # File to which STDERR will be written")),con=con)
+        
+        writeLines(paste0(command,"\n"),con=con)      
+        close(con)
+        #Now the command to launch the job is sbatch batchSubmitJob.sh
+        command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
+      }else{
+        # Command for a non-slurm job
+        command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
+      }
     }
     cat(command)
     system(command)

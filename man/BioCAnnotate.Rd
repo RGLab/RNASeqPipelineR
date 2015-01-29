@@ -5,7 +5,7 @@
 \title{Annotate the features using BioConductor annotation packages}
 \usage{
 BioCAnnotate(annotation_library = "TxDb.Hsapiens.UCSC.hg38.knownGene",
-  force = FALSE)
+  force = FALSE, lib = "org.Hs.eg.db")
 }
 \arguments{
 \item{annotation_library}{\code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.}

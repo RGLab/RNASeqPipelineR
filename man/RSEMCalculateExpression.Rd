@@ -5,7 +5,9 @@
 \title{Use the RSEM tool to align the reads}
 \usage{
 RSEMCalculateExpression(parallel_threads = 2, bowtie_threads = 4,
-  paired = FALSE)
+  paired = FALSE, frag_mean = NULL, frag_sd = NULL, nchunks = 4,
+  days_requested = 5, slurm = FALSE, slurm_partition = "gottardo_r",
+  ram_per_node = 1000)
 }
 \arguments{
 \item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}
@@ -13,6 +15,16 @@ RSEMCalculateExpression(parallel_threads = 2, bowtie_threads = 4,
 \item{bowtie_threads}{\code{integer} specify how many threads bowtie should use.}
 
 \item{paired}{\code{logical} specify whether you have paried reads or not.}
+
+\item{nchunks}{\code{integer} number of chunks to split the files for a slurm job. Ignored if slurm = FALSE}
+
+\item{days_requested}{\code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE}
+
+\item{slurm}{\code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments.}
+
+\item{slurm_partition}{\code{character} the slurm partition to submit to. Ignored if slurm=FALSE}
+
+\item{ram_per_node}{\code{numeric} The number of Mb per node. Ignored if slurm=FALSE}
 }
 \description{
 Use the RSEM tool to align reads

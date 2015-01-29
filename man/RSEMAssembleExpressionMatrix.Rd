@@ -4,7 +4,7 @@
 \alias{RSEMAssembleExpressionMatrix}
 \title{Assemble an expression matrix of all results}
 \usage{
-RSEMAssembleExpressionMatrix()
+RSEMAssembleExpressionMatrix(force = FALSE)
 }
 \description{
 Put all the counts from the individual libraries into a single matrix result
