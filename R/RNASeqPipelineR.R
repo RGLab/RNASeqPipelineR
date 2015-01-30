@@ -611,7 +611,7 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}
 #' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1000){
+RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1200){
   ncores<-parallel_threads*bowtie_threads
   suppressPackageStartupMessages(library(parallel))
   if(ncores>detectCores()&!slurm){

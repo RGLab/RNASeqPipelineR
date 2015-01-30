@@ -4,10 +4,10 @@
 \alias{RSEMCalculateExpression}
 \title{Use the RSEM tool to align the reads}
 \usage{
-RSEMCalculateExpression(parallel_threads = 2, bowtie_threads = 4,
-  paired = FALSE, frag_mean = NULL, frag_sd = NULL, nchunks = 4,
+RSEMCalculateExpression(parallel_threads = 1, bowtie_threads = 6,
+  paired = FALSE, frag_mean = NULL, frag_sd = NULL, nchunks = 10,
   days_requested = 5, slurm = FALSE, slurm_partition = "gottardo_r",
-  ram_per_node = 1000)
+  ram_per_node = bowtie_threads * parallel_threads * 1200)
 }
 \arguments{
 \item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}
@@ -24,7 +24,7 @@ RSEMCalculateExpression(parallel_threads = 2, bowtie_threads = 4,
 
 \item{slurm_partition}{\code{character} the slurm partition to submit to. Ignored if slurm=FALSE}
 
-\item{ram_per_node}{\code{numeric} The number of Mb per node. Ignored if slurm=FALSE}
+\item{ram_per_node}{\code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}}
 }
 \description{
 Use the RSEM tool to align reads
@@ -35,5 +35,8 @@ paired reads have fastq files that differ by one character (i.e. sampleA_read1.f
 matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
 and read 2 is assumed to be downstream.
 The number of parallel_threads*bowtie_threads should not be more than the number of cores available on your system.
+}
+\note{
+The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 }
 
