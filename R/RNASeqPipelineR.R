@@ -608,9 +608,10 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param days_requested \code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE
 #' @param slurm \code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments. 
 #' @param slurm_partition \code{character} the slurm partition to submit to. Ignored if slurm=FALSE
-#' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE
+#' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}
+#' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=4,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=1000){
+RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1000){
   ncores<-parallel_threads*bowtie_threads
   suppressPackageStartupMessages(library(parallel))
   if(ncores>detectCores()&!slurm){
@@ -636,6 +637,9 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
       keep<-setdiff(list.files(path=fastq_dir,pattern="\\.fastq$"),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
       #Single-end
       keep<-paste0(keep,".fastq")
+      if(length(keep)==0){
+        return()
+      }
       myfiles<-file.path(fastq_dir,keep)
       if(!is.null(frag_mean) && !is.null(frag_sd)){
         fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
@@ -671,6 +675,9 @@ RSEMCalculateExpression <- function(parallel_threads=2,bowtie_threads=4,paired=F
     }else{
       #Paired end
       keep<-setdiff(gsub("_[12]\\.fastq","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
+      if(length(keep)==0){
+        return()
+      }
       keep0<-keep
       keep<-paste0(keep0,"_1.fastq")
       keep<-c(keep,paste0(keep0,"_2.fastq"))
