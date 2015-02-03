@@ -740,7 +740,7 @@ RSEMAssembleExpressionMatrix <- function(force=FALSE){
     rsem_files <- list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="genes.results", full.names = TRUE)
     # Read all files and create a list of data.tables
     rsem_list <- lapply(rsem_files, function(x, ...){
-      y<-fread(x, drop=c("length", "effective_length", "FPKM")); 
+      y<-fread(x, drop=c("length", "FPKM")); 
       y$sample_name <- gsub(".genes.results", "", basename(x));
       return(y);})
     
@@ -754,16 +754,18 @@ RSEMAssembleExpressionMatrix <- function(force=FALSE){
     # Assume that missing entries would have a TPM value of 0
     rsem_tpm_matrix <- dcast.data.table(rsem_data_long, gene_id+transcript_ids~sample_name, value.var = "TPM", fill=0)
     rsem_count_matrix <- dcast.data.table(rsem_data_long, gene_id+transcript_ids~sample_name, value.var = "expected_count", fill=0)
-    
+    rsem_effective_length_matrix<-dcast.data.table(rsem_data_long,gene_id+transcript_ids~sample_name,value.var="effective_length",fill=0)
     # Keep track of the gene_id - transcript mapping 
     rsem_txs_table <- rsem_tpm_matrix[, c("gene_id","transcript_ids"), with=FALSE]
     
     # Remove the transcript column (we create an annotation table in the next chunk)
     rsem_tpm_matrix <- rsem_tpm_matrix[, transcript_ids:=NULL][order(gene_id)]
     rsem_count_matrix <- rsem_count_matrix[, transcript_ids:=NULL][order(gene_id)]
+    rsem_effective_length_matrix <- rsem_effective_length_matrix[, transcript_ids:=NULL][order(gene_id)]
     
     # Write to disk
     write.csv(rsem_tpm_matrix, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_tpm_matrix.csv"), row.names=FALSE)
+    write.csv(rsem_effective_length_matrix, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_effective_length_matrix.csv"), row.names=FALSE)
     write.csv(rsem_count_matrix, file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_count_matrix.csv"), row.names=FALSE)
     write.csv(rsem_txs_table,file=file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_txs_table.csv"))
   }
