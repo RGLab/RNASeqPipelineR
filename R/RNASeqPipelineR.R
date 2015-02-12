@@ -636,7 +636,6 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
     if(!paired){
       keep<-setdiff(list.files(path=fastq_dir,pattern="\\.fastq$"),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
       #Single-end
-      keep<-paste0(keep,".fastq")
       if(length(keep)==0){
         return()
       }
