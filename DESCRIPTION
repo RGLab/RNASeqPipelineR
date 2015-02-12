@@ -17,9 +17,10 @@ Imports:
 	ggplot2,
 	knitr,
 	annotate,
-	clue,
-	org.Hs.eg.db,
-	pander,
 	parallel,
 	plyr,
-	dplyr
+	AnnotationDbi
+Suggests:
+	clue,
+	org.Hs.eg.db,
+	pander

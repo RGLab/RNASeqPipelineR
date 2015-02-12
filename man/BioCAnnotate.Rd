@@ -11,6 +11,8 @@ BioCAnnotate(annotation_library = "TxDb.Hsapiens.UCSC.hg38.knownGene",
 \item{annotation_library}{\code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.}
 
 \item{force}{\code{logical} force the annotation step to re-run}
+
+\item{lib}{\code{character} name of library to load}
 }
 \description{
 Annotate the transcripts using bioConductor annotation packages.

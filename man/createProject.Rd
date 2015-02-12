@@ -15,8 +15,6 @@ createProject(project_name, path = ".", verbose = FALSE,
 \item{verbose}{\code{logical} Should verbose output be given?}
 
 \item{load_from_immport}{\code{logical} Creates a 'Tab' directory for Immport tables if the data are loaded from Immport.}
-
-\item{name}{\code{character} The name of the project directory}
 }
 \description{
 Create the skeleton for a new RNASeqPipeline project.
