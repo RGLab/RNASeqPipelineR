@@ -451,7 +451,7 @@ concatenateFastq = function(infile, outfile, pattern)
 #' @param ncores \code{integer} how many threads to use
 runFastQC <- function(ncores=8){
   fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
-  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'*.fastq"'))                             
+  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'"*.fastq'))                             
   if(fastQCL|length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))==0){
     out<-system(run_command)
     if(out==0){
