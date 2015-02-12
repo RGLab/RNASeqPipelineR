@@ -6,6 +6,9 @@
 \usage{
 downloadSRA(GSE_accession = NULL)
 }
+\arguments{
+\item{GSE_accession}{(not implemented)}
+}
 \description{
 Based on the SRA db, download the FastQ files, unless they already exist.
 }

@@ -15,6 +15,23 @@
 #' @import SRAdb
 NULL
 
+## silence complaints about variables not found in calls that use non-standard evaluation
+if(getRversion() >= "2.15.1") globalVariables(c(
+                  'transcript_ids', # RSEMAssembleExpressionMatrix, BioCAnnotate
+                  'transcript_id',  #BioCAnnotate
+                  'entrez_id',
+                  'gene_symbol',
+                  'gene_id',
+                  'record', #summarizeDuplication
+                  'value',
+                  'duplication level',
+                  'totaldup',
+                  'qresult', #summarizeFastQC
+                  'result',
+                  'sum_qresult',
+                  'test'))
+                  
+
 
 dir.exists<-function (x)
 {
@@ -39,7 +56,6 @@ dir.exists<-function (x)
 #' @param path \code{character} Root directory for project
 #' @param verbose \code{logical} Should verbose output be given?
 #' @param load_from_immport \code{logical} Creates a 'Tab' directory for Immport tables if the data are loaded from Immport.
-#' @param name \code{character} The name of the project directory
 #' @return NULL
 #' @export
 #' @examples
@@ -298,7 +314,7 @@ detectAspera<-function(path=NULL){
 #' 
 #' Conditionally download the FastQ files in the SRA db based on Immport tables.
 #' If the files are already present, they will not be downloaded.
-#' 
+#' @param GSE_accession (not implemented)
 #' @export
 downloadSRA <- function(GSE_accession=NULL){
   #Two branches.. if immport_tables exists and if they don't
@@ -451,7 +467,7 @@ concatenateFastq = function(infile, outfile, pattern)
 #' @param ncores \code{integer} how many threads to use
 runFastQC <- function(ncores=8){
   fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
-  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'*.fastq"'))                             
+  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'"*.fastq'))                             
   if(fastQCL|length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))==0){
     out<-system(run_command)
     if(out==0){
@@ -602,8 +618,10 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' and read 2 is assumed to be downstream. 
 #' The number of parallel_threads*bowtie_threads should not be more than the number of cores available on your system.
 #' @param parallel_threads \code{integer} specify how many parallel processes to spawn
-#' @param paired \code{logical} specify whether you have paried reads or not.
 #' @param bowtie_threads \code{integer} specify how many threads bowtie should use.
+#' @param paired \code{logical} specify whether you have paried reads or not.
+#' @param frag_mean \code{numeric}
+#' @param frag_sd \code{numeric} For single ended reads, specifying these might make calculations of effect length more effective.  Optional.
 #' @param nchunks \code{integer} number of chunks to split the files for a slurm job. Ignored if slurm = FALSE
 #' @param days_requested \code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE
 #' @param slurm \code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments. 
@@ -613,8 +631,7 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @export
 RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1200){
   ncores<-parallel_threads*bowtie_threads
-  suppressPackageStartupMessages(library(parallel))
-  if(ncores>detectCores()&!slurm){
+  if(ncores>parallel::detectCores()&!slurm){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
   }
   if(!slurm){
@@ -636,7 +653,6 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
     if(!paired){
       keep<-setdiff(list.files(path=fastq_dir,pattern="\\.fastq$"),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
       #Single-end
-      keep<-paste0(keep,".fastq")
       if(length(keep)==0){
         return()
       }
@@ -732,6 +748,7 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
 #' Put all the counts from the individual libraries into a single matrix result
 #' 
 #' Assemble an expression matrix from the individual libraries.
+#' @param force \code{logical} rerun even if output exists
 #'@export 
 RSEMAssembleExpressionMatrix <- function(force=FALSE){
   cond_eval <- length(list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="rsem_"))<4
@@ -779,7 +796,9 @@ RSEMAssembleExpressionMatrix <- function(force=FALSE){
 #' annotation_library argument
 #' @param annotation_library \code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.
 #' @param force \code{logical} force the annotation step to re-run
+#' @param lib \code{character} name of library to load
 #' @export
+#' @import annotate AnnotationDbi
 BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE,lib="org.Hs.eg.db"){
   featuredata_outfile<-"rsem_fdata.csv"
   if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
@@ -789,7 +808,6 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   do.call(library,(list(eval(annotation_library))))
   #save the annotation library
   assignConfig("annotation_library",annotation_library)
-  library(annotate)
   eval(as.call(list(library,as.name(lib))))
   message("Annotating transcripts.")
   txdb <- get(annotation_library)
@@ -799,7 +817,7 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   tx_to_gid <- rsem_txs_table[,list(transcript_id=strsplit(as.character(transcript_ids),",")[[1]]),by="gene_id"]
   
   # map the transcripts to entrez gene ids
-  tx_to_eid <- data.table(AnnotationDbi:::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
+  tx_to_eid <- data.table(AnnotationDbi::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
   setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
   
   # Add gene symbol
@@ -822,8 +840,6 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
 #' This needs to be run on the system that produced the results. Output to project directory OUTPUT/pipeline_report.md.
 #' @export
 pipelineReport<-function(){
-  library(pander)
-  library(plyr)
   #save the configuration, since we're probably done.
   saveConfig()
   command <- c("ascp --version",
@@ -875,7 +891,7 @@ readConfig <- function(project=NULL){
     message("No configuration information found")
     return(invisible(FALSE))
   }
-  obj<-readRDS(list.files(confdir,pattern="configuration.rds",full=TRUE))
+  obj<-readRDS(list.files(confdir,pattern="configuration.rds",full.names=TRUE))
   
   #store in the namespace
   ns <- getNamespace("RNASeqPipelineR")
@@ -894,11 +910,11 @@ readConfig <- function(project=NULL){
 getExpressionSet <- function(which="counts"){
   which<-match.arg(arg = which, c("counts","tpm"))
   if(which%in%"counts")
-    mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_count_matrix.csv",full=TRUE))
+    mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_count_matrix.csv",full.names=TRUE))
   else
-    mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_tpm_matrix.csv",full=TRUE))
-  featuredata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_fdata.csv",full=TRUE))
-  pdata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_pdata.csv",full=TRUE))
+    mat <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_tpm_matrix.csv",full.names=TRUE))
+  featuredata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_fdata.csv",full.names=TRUE))
+  pdata <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_pdata.csv",full.names=TRUE))
   
   #Construct an Eset and return
   pdata<-data.frame(pdata)
@@ -960,9 +976,9 @@ MiTCR <- function(gene="TRB",species=NULL,ec=2,pset="flex",ncores=1,output_forma
   tcrdir <- file.path(dirname(fastqdir),"TCR")
   system(paste0("mkdir -p ",tcrdir))
   if(!paired){
-    fastqfiles<-list.files(fastqdir,pattern="fastq$",full=TRUE)
+    fastqfiles<-list.files(fastqdir,pattern="fastq$",full.names=TRUE)
   }else{
-    fastqfiles<-list.files(fastqdir,pattern="\\.assembled\\.fastq$",full=TRUE)
+    fastqfiles<-list.files(fastqdir,pattern="\\.assembled\\.fastq$",full.names=TRUE)
   }
   if(ncores>1){
     outpath<-NULL
@@ -1001,7 +1017,7 @@ pear<-function(ncores=4){
   pear_directory<-getConfig()[["subdirs"]][["PEAR"]]
   #We just assume that paired fastq files differ by one character, that there are an even number of them, and that the operating system
   #will return them to us in lexicographical order. 
-  files<-(list.files(path=fastq_dir,pattern="*.fastq",full=FALSE))
+  files<-(list.files(path=fastq_dir,pattern="*.fastq",full.names=FALSE))
   f<-file.path(pear_directory,"pear_arguments.txt")
   connection<-file(f,open="w")
   writeLines(files,con = connection)
@@ -1035,7 +1051,6 @@ getDataFromSRX<-function(x=NULL){
 #'
 #'Gets annotations for SRR files based on SRAmetadb contents
 #'@param x \code{character} vector of SRX accessions
-#'@import plyr dplyr
 #'@export
 annotationsFromSRX<-function(x){
   samples<-data.table(listSRAfile(x,getConfig()[["sra_con"]]))
@@ -1050,7 +1065,7 @@ annotationsFromSRX<-function(x){
   attributes<-strsplit(pdata$sample_attribute,"\\|\\|")
   names(attributes)<-pdata$run
   attributes<-lapply(attributes,function(x)t(cbind(x)))
-  annotations<-ldply(lapply(attributes,function(x){
+  annotations<-plyr::ldply(lapply(attributes,function(x){
     column_names<-gsub("(^.+?):.*","\\1",x)
     matrix_entries<-gsub(" +$","",gsub("^ +","",gsub("^.+?:(.*)","\\1",x)))
     colnames(matrix_entries)<-column_names

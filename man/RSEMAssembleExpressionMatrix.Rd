@@ -6,6 +6,9 @@
 \usage{
 RSEMAssembleExpressionMatrix(force = FALSE)
 }
+\arguments{
+\item{force}{\code{logical} rerun even if output exists}
+}
 \description{
 Put all the counts from the individual libraries into a single matrix result
 }

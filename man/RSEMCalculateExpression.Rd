@@ -16,6 +16,10 @@ RSEMCalculateExpression(parallel_threads = 1, bowtie_threads = 6,
 
 \item{paired}{\code{logical} specify whether you have paried reads or not.}
 
+\item{frag_mean}{\code{numeric}}
+
+\item{frag_sd}{\code{numeric} For single ended reads, specifying these might make calculations of effect length more effective.  Optional.}
+
 \item{nchunks}{\code{integer} number of chunks to split the files for a slurm job. Ignored if slurm = FALSE}
 
 \item{days_requested}{\code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE}

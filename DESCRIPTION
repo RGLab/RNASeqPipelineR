@@ -1,8 +1,8 @@
 Package: RNASeqPipelineR
 Type: Package
 Title: Construct Standardized pipelines for processing RNASeq data.
-Version: 0.31
-Date: 2014-01-08
+Version: 0.32
+Date: 2014-02-09
 Author: Raphael Gottardo and Greg Finak
 Maintainer: Greg Finak <gfinak@fhcrc.org>
 Description: Simplifies and standardizes the pipelining of RNASeq files into
@@ -17,8 +17,10 @@ Imports:
 	ggplot2,
 	knitr,
 	annotate,
+	parallel,
+	plyr,
+	AnnotationDbi
+Suggests:
 	clue,
 	org.Hs.eg.db,
-	pander,
-	parallel,
-	plyr
+	pander
