@@ -731,6 +731,7 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
 #' Put all the counts from the individual libraries into a single matrix result
 #' 
 #' Assemble an expression matrix from the individual libraries.
+#' @param force \code{logical} rerun even if output exists
 #'@export 
 RSEMAssembleExpressionMatrix <- function(force=FALSE){
   cond_eval <- length(list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="rsem_"))<4
@@ -778,7 +779,9 @@ RSEMAssembleExpressionMatrix <- function(force=FALSE){
 #' annotation_library argument
 #' @param annotation_library \code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.
 #' @param force \code{logical} force the annotation step to re-run
+#' @param lib \code{character} name of library to load
 #' @export
+#' @import annotate AnnotationDBI
 BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE,lib="org.Hs.eg.db"){
   featuredata_outfile<-"rsem_fdata.csv"
   if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
@@ -788,7 +791,6 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   do.call(library,(list(eval(annotation_library))))
   #save the annotation library
   assignConfig("annotation_library",annotation_library)
-  library(annotate)
   eval(as.call(list(library,as.name(lib))))
   message("Annotating transcripts.")
   txdb <- get(annotation_library)
@@ -798,7 +800,7 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   tx_to_gid <- rsem_txs_table[,list(transcript_id=strsplit(as.character(transcript_ids),",")[[1]]),by="gene_id"]
   
   # map the transcripts to entrez gene ids
-  tx_to_eid <- data.table(AnnotationDbi:::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
+  tx_to_eid <- data.table(AnnotationDbi::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME"))
   setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
   
   # Add gene symbol
@@ -821,8 +823,6 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
 #' This needs to be run on the system that produced the results. Output to project directory OUTPUT/pipeline_report.md.
 #' @export
 pipelineReport<-function(){
-  library(pander)
-  library(plyr)
   #save the configuration, since we're probably done.
   saveConfig()
   command <- c("ascp --version",
@@ -1034,7 +1034,6 @@ getDataFromSRX<-function(x=NULL){
 #'
 #'Gets annotations for SRR files based on SRAmetadb contents
 #'@param x \code{character} vector of SRX accessions
-#'@import plyr dplyr
 #'@export
 annotationsFromSRX<-function(x){
   samples<-data.table(listSRAfile(x,getConfig()[["sra_con"]]))
@@ -1049,7 +1048,7 @@ annotationsFromSRX<-function(x){
   attributes<-strsplit(pdata$sample_attribute,"\\|\\|")
   names(attributes)<-pdata$run
   attributes<-lapply(attributes,function(x)t(cbind(x)))
-  annotations<-ldply(lapply(attributes,function(x){
+  annotations<-plyr::ldply(lapply(attributes,function(x){
     column_names<-gsub("(^.+?):.*","\\1",x)
     matrix_entries<-gsub(" +$","",gsub("^ +","",gsub("^.+?:(.*)","\\1",x)))
     colnames(matrix_entries)<-column_names
