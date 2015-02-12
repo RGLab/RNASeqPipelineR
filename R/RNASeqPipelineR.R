@@ -651,11 +651,12 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   if(lr!=lq){
     if(!paired){
-      keep<-setdiff(list.files(path=fastq_dir,pattern="\\.fastq$"),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
+      keep<-setdiff(gsub("\\.fastq$","",list.files(path=fastq_dir,pattern="\\.fastq$")),gsub("\\.genes\\.results$","",list.files(path=rsem_dir,pattern="\\.genes\\.results$")))    
       #Single-end
       if(length(keep)==0){
         return()
       }
+      keep<-paste0(keep,".fastq")
       myfiles<-file.path(fastq_dir,keep)
       if(!is.null(frag_mean) && !is.null(frag_sd)){
         fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
