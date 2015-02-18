@@ -458,20 +458,32 @@ concatenateFastq = function(infile, outfile, pattern)
   system(paste0("mv ", infile, "/*.fastq ", outfile))
 }
 
+stripExtension <- function(finame, pattern='([.][A-Za-z]+$)'){
+    sub(pattern, '', finame)
+}
+
 #' Perform FastQC quality control
 #' 
 #' Runs fastqc quality control on the FASTQ files
 #' 
 #' Produces FASTQC reports for each FASTQ file using fastqc
+#' FASTQ input files must have extension \code{fastqc} (capitalization sensitive).
 #' @export
 #' @param ncores \code{integer} how many threads to use
 runFastQC <- function(ncores=8){
-  fastQCL <- length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))<length(list.files(getConfig()[["subdirs"]][["FASTQ"]]))
-  run_command <-  paste0('parallel -j ', ncores,' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],'" -q ::: "',file.path(getConfig()[['subdirs']][['FASTQ']],'"*.fastq'))                             
-  if(fastQCL|length(list.files(getConfig()[["subdirs"]][["FASTQC"]]))==0){
+  fastQCout <- list.files(getConfig()[["subdirs"]][["FASTQC"]])
+  stripFQC <- unique(stripExtension(fastQCout, '(_fastqc.*$)')) #expanded fastqc generates at least 3 files per input
+  FQfile <- list.files(getConfig()[["subdirs"]][["FASTQ"]], pattern="*.fastq", ignore.case=TRUE, full.names=TRUE)
+  FQfile <- data.frame(file=FQfile, done=stripExtension(basename(FQfile)) %in% stripFQC, stringsAsFactors=FALSE)
+  notrun <- FQfile[!FQfile$done,]
+  run_command <-  paste0('parallel -j ', ncores,
+                         ' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],
+                         '" -q ::: "', paste(notrun$file, collapse='" "'), '"')                             
+  if(nrow(notrun) > 0){
+      message('Running fastqc process on ', nrow(notrun), ' files.')
     out<-system(run_command)
     if(out==0){
-      message("Finished fastqc process for ",length(list.files(getConfig()[["subdirs"]][["FASTQ"]])), " files.")
+      message("Finished fastqc process for ", nrow(notrun), " files.")
       message("Expanding archives")
       f<-list.files(pattern="zip$",path=getConfig()[["subdirs"]][["FASTQC"]])
       sapply(f,function(x){
@@ -662,7 +674,7 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
         fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
       } else{
         fragLenArg <- ''
-      }
+    }
       
       chunked<-.chunkDataFrame(data.frame(files=myfiles),nchunks)
       #TODO rewrite to use arguments file
@@ -707,7 +719,7 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
         con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt")))
         writeLines(t(chunked[[i]]),con=con)
         close(con)
-      }
+    }
       
       if(!is.null(frag_mean) || !is.null(frag_sd)){
         warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
