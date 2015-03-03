@@ -671,7 +671,7 @@ RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=F
       }
       if(slurm){
         con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
-        command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))        
+        command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))        
         ram_requested<-parallel_threads*ram_per_node
         writeLines(c("#!/bin/bash\n",
                      paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
