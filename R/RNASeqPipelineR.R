@@ -801,6 +801,41 @@ RSEMAssembleExpressionMatrix <- function(force=FALSE){
   }
 }
 
+##' Summarize the number of mapped, unmapped and ambiguous reads from RSEM output
+##'
+##' @param dir Directory containing RSEM cnt files.  If missing, use the RSEM directory from project.
+##' @param log return log of reads?
+##' @param plot print a ggplot summary
+##' @return returns a data table of # reads per library, invisibly
+RSEMSummarizeMapping <- function(dir, log=TRUE, plot=TRUE){
+    if(missing(dir)) dir <- getConfig()[["subdirs"]][["RSEM"]]
+    cnt_files <- list.files(dir, pattern="*.cnt", full.names = TRUE, recursive=TRUE)
+    fastqc_list <- lapply(cnt_files, function(x, ...){
+        y <- fread(x, skip=3)
+        setnames(y, c('nmap', 'reads'))
+        y[,curead:=cumsum(reads)]
+        file <- str_replace(basename(x), fixed('.cnt'), '')
+        total <- y[nmap==Inf,curead]
+        mapped <- total-y[nmap==0,reads]
+        unique <- y[nmap==1,reads]
+        z <- data.table(file, total, mapped, unique)
+        return(z)})
+    fql <- rbindlist(fastqc_list)
+    fqlM <- data.table:::melt.data.table(fql, id.vars='file')
+    if(log){
+        fqlM[,value:=log10(value+1)]
+    }
+    fqlM[,outlier:={
+        bs <- boxplot.stats(value)
+        value<bs$stats[1] | value > bs$stats[5]
+    },keyby='variable'
+     ]
+
+    ggp <- ggplot(fqlM, aes(x=variable, y=value))+geom_boxplot() + geom_text(aes(label=ifelse(outlier, file, "")), size=2) + ylab(if(log) 'log10(reads+1)' else 'reads')
+    if(plot) print(ggp)
+    invisible(fqlM)
+}
+
 #' Annotate the features using BioConductor annotation packages
 #' 
 #' Annotate the transcripts using bioConductor annotation packages. 
