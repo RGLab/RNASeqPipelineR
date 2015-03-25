@@ -80,7 +80,7 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
   if(success)
     invisible()
   cmnd_prefix <- "mkdir -p "
-  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG",OUTPUT="OUTPUT",RAWANNOTATIONS="RAW_ANNOTATIONS")
+  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG",OUTPUT="OUTPUT",RAWANNOTATIONS="RAW_ANNOTATIONS", RNASEQC="RNASEQC", TOPHAT="TOPHAT")
   if(load_from_immport)
     dirs<-c(dirs,Tab="Tab")
   subdirs <- file.path(project_dir,dirs)
@@ -1127,3 +1127,195 @@ annotationsFromSRX<-function(x){
   message("Wrote pData to RSEM/rsem_pdata.csv")
   annotations
 }
+
+#' Use the Tophat tool to align reads
+#' 
+#' Uses Tophat to align reads in FASTQ files against the reference genome hg38 from UCSC database. Optionally you can specify paired end reads. The code assumes 
+#' paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
+#' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
+#' and read 2 is assumed to be downstream. 
+#' 
+#' The number of parallel_threads*tophat_threads should not be more than the number of cores available on your system.
+#' @param path \code{character} specifying an \emph{absolute path} path to the iGenome directory.
+#' @param parallel_threads \code{integer} specify how many parallel processes to spawn
+#' @param tophat_threads \code{integer} specify how many threads bowtie should use.
+#' @param paired \code{logical} specify whether you have paried reads or not.
+#' @param nchunks \code{integer} number of chunks to split the files for a slurm job. Ignored if slurm = FALSE
+#' @param days_requested \code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE
+#' @param slurm \code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments. 
+#' @param slurm_partition \code{character} the slurm partition to submit to. Ignored if slurm=FALSE
+#' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}
+#' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
+#' @export
+sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jingyuan_working/iGenome/Mus_musculus/UCSC/mm10", parallel_threads=1,tophat_threads=6, paired=FALSE, nchunks=10,days_requested=5,
+                                   slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=tophat_threads*parallel_threads*1200)
+{
+  ncores<-parallel_threads*tophat_threads
+  if(ncores>parallel::detectCores()&!slurm){
+    stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
+  }
+  if(!slurm){
+    #If we aren't using slurm, set the number of chunks to one.
+    nchunks<-1
+  }
+  #Chunking for slurm
+  .chunkDataFrame<-function(df=pairs,nchunks=nchunks){        
+    groupsize<-nrow(df)%/%nchunks
+    split(as.data.frame(df),gl(nchunks,groupsize,length=nrow(df)))
+  }
+  
+  subdirs<-getConfig()[["subdirs"]]
+  subdirs[["iGenome"]]<-path
+  assignConfig("subdirs",subdirs)
+  tophat_dir <- getConfig()[["subdirs"]][["TOPHAT"]]
+  fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
+  genome.gtf <- file.path(getConfig()[["subdirs"]][["iGenome"]],"genes.gtf")
+  genome.index <- file.path(getConfig()[["subdirs"]][["iGenome"]],"genome")
+  fastq.files <- list.files(fastq_dir, ".fastq$", full = T, recursive = T)
+  if(paired){
+    samples <- unique(sub("_..fastq", "", basename(fastq.files)))
+    f1 <- fastq.files[match(paste0(samples,"_1.fastq"), basename(fastq.files))]
+    f2 <- fastq.files[match(paste0(samples,"_2.fastq"), basename(fastq.files))]
+    pairs <- cbind(f1, f2, samples)
+    chunked<-.chunkDataFrame(pairs,nchunks)
+    for(i in seq_along(chunked)){
+      con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt")))
+      writeLines(t(chunked[[i]]),con=con)
+      close(con)
+    }
+    if(slurm){
+      #With chunking enabled this is meant to be submitted as a slurm batch job with the --array option set to 1-nchunks
+      con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
+      command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {3} ",
+                      genome.index, " {1} {2} {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
+      #Before writing the command we need to  preamble for the slurm job
+      # We'll request 1Gb of RAM per parallel thread per node
+      ram_requested<-parallel_threads*ram_per_node
+      writeLines(c("#!/bin/bash\n",
+                   paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
+                   "#SBATCH -N 1                 # Ensure that all cores are on one machine",
+                   paste0("#SBATCH -t ",days_requested,"-00:00           # Runtime in D-HH:MM"),
+                   paste0("#SBATCH -p ",slurm_partition,"    # Partition to submit to"),
+                   paste0("#SBATCH --mem=",ram_requested,"            # Memory pool for all cores (see also --mem-per-cpu)"),
+                   paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"tophat_%a.out"),"      # File to which STDOUT will be written"),
+                   paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"tophat_%a.err"),"      # File to which STDERR will be written")),con=con)
+      
+      writeLines(paste0(command,"\n"),con=con)      
+      close(con)
+      #Now the command to launch the job is sbatch batchSubmitJob.sh
+      command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
+    }else{
+      # Command for a non-slurm job
+      command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {3} ", 
+                      genome.index, " {1} {2} {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
+    }
+  }else{
+    myfiles <- cbind(fastq.files, gsub(".fastq", "", basename(fastq.files)))
+    chunked<-.chunkDataFrame(myfiles,nchunks)
+    for(i in seq_along(chunked)){
+      con=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt")))
+      writeLines(t(chunked[[i]]),con=con)
+      close(con)
+    }
+    if(slurm){
+      #With chunking enabled this is meant to be submitted as a slurm batch job with the --array option set to 1-nchunks
+      con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
+      command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {2} ",
+                      genome.index, " {1} {2.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
+      #Before writing the command we need to  preamble for the slurm job
+      # We'll request 1Gb of RAM per parallel thread per node
+      ram_requested<-parallel_threads*ram_per_node
+      writeLines(c("#!/bin/bash\n",
+                   paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
+                   "#SBATCH -N 1                 # Ensure that all cores are on one machine",
+                   paste0("#SBATCH -t ",days_requested,"-00:00           # Runtime in D-HH:MM"),
+                   paste0("#SBATCH -p ",slurm_partition,"    # Partition to submit to"),
+                   paste0("#SBATCH --mem=",ram_requested,"            # Memory pool for all cores (see also --mem-per-cpu)"),
+                   paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"tophat_%a.out"),"      # File to which STDOUT will be written"),
+                   paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"tophat_%a.err"),"      # File to which STDERR will be written")),con=con)
+      
+      writeLines(paste0(command,"\n"),con=con)      
+      close(con)
+      #Now the command to launch the job is sbatch batchSubmitJob.sh
+      command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
+    }else{
+      # Command for a non-slurm job
+      command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {2} ", 
+                      genome.index, " {1} {2.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
+    }
+  }
+  cat(command)
+  system(command)
+}
+
+#' Create Sample file required as the input of RNASeQC
+#' 
+#' The sample file is the tab-delimited description of samples and their bams. The header of the file should be: SampleID BamFile Notes
+#' The BamFile should be the path to the input file
+.createSampleFile = function(){
+  bam.files <- list.files(getConfig()[["subdirs"]][["TOPHAT"]], "accepted_hits_added.bam$", full = T, recursive = T)
+  sampleid <- sapply(strsplit(bam.files, "/"), function(x) x[length(x)-1])
+  note <- sapply(strsplit(sampleid, "_"), function(x) x[1])  
+  dat <- data.frame("Sample ID" = sampleid, "Bam File" = bam.files, "Notes" = note, stringsAsFactors = F)
+  write.table(dat, file = paste0(getConfig()[["subdirs"]][["RAWANNOTATIONS"]],"/samplefile"), col.name = T, row.name = F, quote = F, sep = "\t")
+  dat
+}
+
+#' Create a dict (dictionary) file for the refrence genome required as the input of RNASeQC
+#' 
+#' This dict file should be within the same folder as the refrence genome
+#' @param fasta_file \code{character} the name of the fasta file, must be specified
+#' @param picard.path \code{character} specifying an \emph{absolute path} path to the PICARD software directory.
+.createGenomeDict=function(picard.path="/home/jdeng/bin/picard-tools-1.110/")
+{
+  genome.fa <- file.path(getConfig()[["subdirs"]][["iGenome"]], "genome.fa")
+  cmd=paste("java -Xmx2048m -Xms2048m -jar ",picard.path,"/CreateSequenceDictionary.jar REFERENCE=",genome.fa," OUTPUT=",gsub(".fa.*",".dict",genome.fa),sep="")
+  print(cmd)
+  system(cmd)
+}
+
+#' Run RNASeQC quality control
+#' 
+#' Pre-run Checklist
+#' 1. Are the contig names consistent betwen BAM, Refrence and GTF file? 
+#' 2. Is the BAM indexed? we index the bam files in the prepareBamFiles
+#' 3. Is you reference Indexed? We index the refrence genome before runing the tophat
+#' 4. Dose the reference genome have a dict file? we generated the dict file in the createGenomeDict
+#' 
+#' @param rna_seqc.path \code{character} specifying an \emph{absolute path} path to the RNASeQC directory.
+#' @param picard.path \code{character} specifying an \emph{absolute path} path to the PICARD software directory.
+#' @param paired \code{logical} specify whether data is paired. Defaults to FALSE.
+#' @param ncores \code{integer} number of cores for running in parallel
+#' @export
+qualityRNASeQC = function(picard.path="/home/jdeng/bin/picard-tools-1.110/", ncores=6, rna_seqc.path="/home/jdeng/bin/RNA-SeQC_v1.1.7.jar", paired=FALSE){
+  print("Step 1: Prepare bam files")
+  genome.fa <- file.path(getConfig()[["subdirs"]][["iGenome"]], "genome.fa")
+  bam.files <- list.files(getConfig()[["subdirs"]][["TOPHAT"]], "accepted_hits.bam$", full = T, recursive = T)
+  mclapply(bam.files, function(s){
+    # add read group to bam
+    cmd <- paste0("nohup java -Xmx2048m -Xms2048m -jar ", picard.path, "AddOrReplaceReadGroups.jar I=", s, " O=", sub(".bam", "_added.bam", s), " SORT_ORDER=coordinate RGID=1 RGLB=1 RGPL=illumina RGPU=barcode RGSM=1")
+    system(cmd)
+    # index bam
+    cmd <- paste0("samtools index ", sub(".bam", "_added.bam", s))
+    system(cmd)
+  }, mc.preschedule = F, mc.cores = ncores)
+  
+  print("Step2: Create Sample file\n")
+  .createSampleFile()
+  
+  print("step3: Greate Genome dict")
+  .createGenomeDict(picard.path)
+  
+  print("step4: Run RNASeQC")
+  rnaseqc.dir <- getConfig()[["subdirs"]][["RNASEQC"]]
+  genome.gtf <- file.path(getConfig()[["subdirs"]][["iGenome"]],"genes.gtf")
+  samplefile <- file.path(getConfig()[["subdirs"]][["RAWANNOTATIONS"]],"samplefile")
+  if(paired){
+    cmd <- paste0("nohup java -Xmx2048m -Xms2048m -jar ", rna_seqc.path, " -o ", rnaseqc.dir, " -r ", genome.fa, " -s ", samplefile, " -t ", genome.gtf)                        
+  }else{
+    cmd <- paste0("nohup java -Xmx2048m -Xms2048m -jar ", rna_seqc.path, " -o ", rnaseqc.dir, " -r ", genome.fa, " -s ", samplefile, " -singleEnd -t ", genome.gtf)
+  }
+  system(cmd)
+}
+
+
