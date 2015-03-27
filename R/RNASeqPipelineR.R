@@ -1319,3 +1319,54 @@ qualityRNASeQC = function(picard.path="/home/jdeng/bin/picard-tools-1.110/", nco
 }
 
 
+#' Generate QualityControl Matric.
+#' 
+#' calculate qc statistics: nGenesOn, librarySize, alignment percentage to reference genome, exon mapping rate, 
+#' and per base sequence quality output by FASTQC software
+#' 
+#' @param paired \code{logical} specify whether you have paried reads or not. 
+#' @export
+QualityControl <- function(paired=FALSE){
+  library(XML)
+  countMatrix <-  fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_count_matrix.csv",full.names=TRUE))[ ,-1,with=FALSE]
+  result <- data.table(Sample=colnames(countMatrix), nGeneOn = colSums(countMatrix>0))
+  ### alignment rate
+  tophat.dir <- getConfig()[["subdirs"]][["TOPHAT"]]
+  alignSummary.files <- list.files(tophat.dir, "align_summary.txt$", full = T, recursive = T)
+  alignFileNames <- sapply(strsplit(alignSummary.files, "/"), function(x) x[length(x)-1])
+  if(paired){
+    res_tophat <- do.call(rbind, lapply(alignSummary.files, function(i) {
+      res <- scan(i, what = "", sep=":", skip=1)
+      libSize <- as.numeric(res[2])
+      alignRate <- as.numeric(substr(res[21], 1, 4))/100
+      cbind(libSize, alignRate)}))
+  }else{
+    res_tophat <- t(sapply(alignSummary.files, function(i) {
+      res <- scan(i, what = "", sep=":", skip=1)
+      libSize <- as.numeric(res[2])
+      alignRate <- as.numeric(substr(res[7], 1, 4))/100
+      data.frame(libSize, alignRate)}))
+  }
+  res_tophat <- data.table(Sample=alignFileNames, res_tophat)
+  result <- merge(result, res_tophat, by="Sample")
+  ##### exon rate
+  rnaseqc <- list.files(getConfig()[["subdirs"]][["RNASEQC"]], "report.html", full=T)
+  exonRate <- data.table(ldply(lapply(rnaseqc, function(x) readHTMLTable(x, stringsAsFactors = F)[[4]][ ,c(1,4)])))
+  result <- merge(result, exonRate, by="Sample") 
+  setnames(result, "Exonic Rate", "exonRate")
+  result[ ,exonRate:=as.numeric(exonRate)]
+  ###### Fastqc
+  fastqc <- list.files(getConfig()[["subdirs"]][["FASTQC"]], "summary.txt", full = T, recursive = T)
+  fastqcFileNames <- sub("_fastqc", "", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]))
+  if(!paired){
+    res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
+    res_fastqc[res_fastqc == "WARN"] <- "PASS"
+    res_fastqc <- data.table(Sample=fastqcFileNames, res_fastqc)
+    result <- merge(result, res_fastqc, by="Sample")
+  }
+  write.csv(result, file=file.path(getConfig()[["subdirs"]][["OUTPUT"]],"quality_control_matrix.csv"), row.names=TRUE)
+  result
+}
+
+
+
