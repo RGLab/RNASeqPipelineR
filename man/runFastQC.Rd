@@ -14,5 +14,6 @@ Runs fastqc quality control on the FASTQ files
 }
 \details{
 Produces FASTQC reports for each FASTQ file using fastqc
+FASTQ input files must have extension \code{fastqc} (capitalization sensitive).
 }
 

@@ -7,7 +7,7 @@
 RSEMCalculateExpression(parallel_threads = 1, bowtie_threads = 6,
   paired = FALSE, frag_mean = NULL, frag_sd = NULL, nchunks = 10,
   days_requested = 5, slurm = FALSE, slurm_partition = "gottardo_r",
-  ram_per_node = bowtie_threads * parallel_threads * 1200)
+  ram_per_node = bowtie_threads * parallel_threads * 1200, fromBAM = FALSE)
 }
 \arguments{
 \item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}
@@ -29,6 +29,8 @@ RSEMCalculateExpression(parallel_threads = 1, bowtie_threads = 6,
 \item{slurm_partition}{\code{character} the slurm partition to submit to. Ignored if slurm=FALSE}
 
 \item{ram_per_node}{\code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}}
+
+\item{fromBAM}{\code{logical} if \code{TRUE} then RSEM will attempt to use previously aligned BAM files, in the \code{BAM} directory, rather than fastq files.  The file names expected to end with \code{.transcript.bam}.  See RSEM documentation for the format these files must obey.}
 }
 \description{
 Use the RSEM tool to align reads
