@@ -1183,7 +1183,7 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
       #With chunking enabled this is meant to be submitted as a slurm batch job with the --array option set to 1-nchunks
       con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
       command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {3} ",
-                      genome.index, " {1} {2} {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
+                      genome.index, " {1} {2} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
       #Before writing the command we need to  preamble for the slurm job
       # We'll request 1Gb of RAM per parallel thread per node
       ram_requested<-parallel_threads*ram_per_node
@@ -1203,7 +1203,7 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
     }else{
       # Command for a non-slurm job
       command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {3} ", 
-                      genome.index, " {1} {2} {3.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
+                      genome.index, " {1} {2} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
     }
   }else{
     myfiles <- cbind(fastq.files, gsub(".fastq", "", basename(fastq.files)))
@@ -1216,8 +1216,8 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
     if(slurm){
       #With chunking enabled this is meant to be submitted as a slurm batch job with the --array option set to 1-nchunks
       con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
-      command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {2} ",
-                      genome.index, " {1} {2.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
+      command<-paste0("cd ",tophat_dir," && parallel -n 2 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {2} ",
+                      genome.index, " {1} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt","\n")))
       #Before writing the command we need to  preamble for the slurm job
       # We'll request 1Gb of RAM per parallel thread per node
       ram_requested<-parallel_threads*ram_per_node
@@ -1236,8 +1236,8 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
       command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
     }else{
       # Command for a non-slurm job
-      command<-paste0("cd ",tophat_dir," && parallel -n 3 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {2} ", 
-                      genome.index, " {1} {2.} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
+      command<-paste0("cd ",tophat_dir," && parallel -n 2 -j ",parallel_threads," tophat -p ", tophat_threads," -G ", genome.gtf, " --keep-fasta-order --no-novel-junc -o {2} ", 
+                      genome.index, " {1} :::: ",file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_1.txt","\n")))        
     }
   }
   cat(command)
