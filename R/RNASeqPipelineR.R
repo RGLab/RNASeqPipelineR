@@ -1525,30 +1525,44 @@ KALLISTOBioCAnnotate <- function(annotation_library="TxDb.Hsapiens.UCSC.hg38.kno
     
     # Reshape the long data.table to create a matrix
     # Assume that missing entries would have a TPM value of 0
-    kallisto_tpm_matrix <- dcast.data.table(kallisto_data_long, transcript_id~samples, value.var = "tpm", fill=0)
-    kallisto_count_matrix <- dcast.data.table(kallisto_data_long, transcript_id~samples, value.var = "est_counts", fill=0)
-    kallisto_effective_length_matrix <- dcast.data.table(kallisto_data_long, transcript_id~samples, value.var = "eff_length", fill=0)
-    
+    kallisto_tpm_transcript <- dcast.data.table(kallisto_data_long, transcript_id~samples, value.var = "tpm", fill=0)
+    kallisto_count_transcript <- dcast.data.table(kallisto_data_long, transcript_id~samples, value.var = "est_counts", fill=0)
+   
     do.call(library,(list(eval(annotation_library))))
     #save the annotation library
     assignConfig("annotation_library",annotation_library)
     eval(as.call(list(library,as.name(lib))))
     message("Annotating transcripts.")
     txdb <- get(annotation_library)
+    
     # map the transcripts to entrez gene ids
-    tx_to_eid <- na.omit(data.table(AnnotationDbi::select(txdb, keys = kallisto_tpm_matrix[,transcript_id], columns="GENEID", keytype="TXNAME")))
+    tx_to_eid <- na.omit(data.table(AnnotationDbi::select(txdb, keys = kallisto_tpm_transcript[,transcript_id], columns="GENEID", keytype="TXNAME")))
     setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
+    
     # Add gene symbol
     tx_to_eid[!is.na(entrez_id),gene_symbol:=getSYMBOL(tx_to_eid[!is.na(entrez_id),entrez_id], data=gsub("\\.db","",lib))]
     tx_to_eid <- tx_to_eid[!is.na(gene_symbol)]
-    kallisto_tpm_matrix <- merge(tx_to_eid, kallisto_tpm_matrix, by="transcript_id")
-    kallisto_count_matrix <- merge(tx_to_eid, kallisto_count_matrix, by="transcript_id")
-    kallisto_effective_length_matrix <- merge(tx_to_eid, kallisto_effective_length_matrix, by="transcript_id")
+    
+    # Merge gene ids and gene symbol with transcrit id matrix
+    kallisto_tpm_transcript <- merge(tx_to_eid, kallisto_tpm_transcript, by="transcript_id")
+    kallisto_count_transcript <- merge(tx_to_eid, kallisto_count_transcript, by="transcript_id")
+    
+    # get feature data 
+    fd_full <- kallisto_tpm_transcript[ ,c(1:3), with=F]
+    fd <- fd_full[, list(transcript_id=paste(unique(transcript_id), collapse=","), entrez_id=paste(unique(entrez_id), collapse=",")), by="gene_symbol" ]
+    
+    # Combining transcripts belong to the same gene symbol using aggreation functions
+    kallisto_tpm_transcript <- kallisto_tpm_transcript[ ,-c(1:2),with=F]
+    kallisto_count_transcript <- kallisto_count_transcript[ ,-c(1,2),with=F]
+   
+    kallisto_tpm_matrix <- kallisto_tpm_transcript[ ,lapply(.SD, sum), by="gene_symbol"]
+    kallisto_count_matrix <- kallisto_count_transcript[ ,lapply(.SD, sum), by="gene_symbol"]
+    
     
     # Write to disk
-    write.csv(kallisto_tpm_matrix, file=file.path(getConfig()[["subdirs"]][["KALLISTO"]],"kallisto_tpm_matrix.csv"), row.names=FALSE)
-    write.csv(kallisto_effective_length_matrix, file=file.path(getConfig()[["subdirs"]][["KALLISTO"]],"kallisto_effective_length_matrix.csv"), row.names=FALSE)
+    write.csv(kallisto_tpm_matrix, file=file.path(getConfig()[["subdirs"]][["KALLISTO"]],"kallisto_tpm_matrix.csv"), row.names=FALSE) 
     write.csv(kallisto_count_matrix, file=file.path(getConfig()[["subdirs"]][["KALLISTO"]],"kallisto_count_matrix.csv"), row.names=FALSE)
+    write.csv(fd, file=file.path(getConfig()[["subdirs"]][["KALLISTO"]],"feature_data.csv"), row.names=FALSE)
   }
 }
 
