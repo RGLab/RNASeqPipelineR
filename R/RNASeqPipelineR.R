@@ -622,135 +622,133 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 }
 
 #' Use the RSEM tool to align the reads
-#' 
+#'
 #' Use the RSEM tool to align reads
-#' 
-#' Uses RSEM to align reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes 
+#'
+#' Uses RSEM to align reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes
 #' paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
 #' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
-#' and read 2 is assumed to be downstream. 
+#' and read 2 is assumed to be downstream.
 #' The number of parallel_threads*bowtie_threads should not be more than the number of cores available on your system.
 #' @param parallel_threads \code{integer} specify how many parallel processes to spawn
 #' @param bowtie_threads \code{integer} specify how many threads bowtie should use.
 #' @param paired \code{logical} specify whether you have paried reads or not.
 #' @param frag_mean \code{numeric}
-#' @param frag_sd \code{numeric} For single ended reads, specifying these might make calculations of effect length more effective.  Optional.
+#' @param frag_sd \code{numeric} For single ended reads, specifying these might make calculations of effect length more effective. Optional.
 #' @param nchunks \code{integer} number of chunks to split the files for a slurm job. Ignored if slurm = FALSE
 #' @param days_requested \code{integer} number of days requested for the job (when submitting a slurm job). Ignored if slurm = FALSE
-#' @param slurm \code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments. 
+#' @param slurm \code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments.
 #' @param slurm_partition \code{character} the slurm partition to submit to. Ignored if slurm=FALSE
 #' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}
-#' @param fromBAM \code{logical} if \code{TRUE} then RSEM will attempt to use previously aligned BAM files, in the \code{BAM} directory, rather than fastq files.  The file names expected to end with \code{.transcript.bam}.  See RSEM documentation for the format these files must obey.
+#' @param fromBAM \code{logical} if \code{TRUE} then RSEM will attempt to use previously aligned BAM files, in the \code{BAM} directory, rather than fastq files. The file names expected to end with \code{.transcript.bam}. See RSEM documentation for the format these files must obey.
 #' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=1,bowtie_threads=6,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1200, fromBAM=FALSE){
-    ncores<-parallel_threads*bowtie_threads
-    if(ncores>parallel::detectCores()&!slurm){
-        stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
+RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1200, fromBAM=FALSE, fromSTAR=FALSE){
+  ncores<-parallel_threads*bowtie_threads
+  if(ncores>parallel::detectCores()&!slurm){
+    stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
+  }
+  #Chunking for slurm
+  .chunkDataFrame<-function(df=pairs,nchunks=nchunks){
+    groupsize<-nrow(df)%/%nchunks
+    split(as.data.frame(df),gl(nchunks,groupsize,length=nrow(df)))
+  }
+  rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
+  done <- str_replace(list.files(path=rsem_dir,pattern="\\.genes\\.results$"), '\\.genes\\.results$', '')
+  #browser()
+  if(!fromBAM){
+    fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
+    todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), '(_[12])?\\.fastq$', ''))
+    extension <- if(paired) c('_1.fastq', '_2.fastq') else '.fastq'
+  } else if(!fromSTAR){
+    fastq_dir <- getConfig()[["subdirs"]][["BAM"]]
+    orig <- list.files(path=fastq_dir,pattern="\\.bam$")
+    todo <- str_replace(orig, '(\\.transcript)?\\.bam$', '')
+    extension <- str_match(orig[1], '(\\.transcript)?\\.bam$')[1,1]
+  }else{
+    fastq_dir <- getConfig()[["subdirs"]][["BAM"]]
+    orig <- list.files(path=fastq_dir,pattern="Aligned.toTranscriptome.out.bam$")
+    todo <- str_replace(orig, 'Aligned.toTranscriptome.out.bam$', '')
+    extension <- str_match(orig[1], 'Aligned.toTranscriptome.out.bam$')[1,1]
+  }
+  keep <- setdiff(todo, done)
+  if(length(keep)==0){
+    message("Expression already calculated")
+    return()
+  }
+  reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
+  reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
+  keep <- outer(keep, extension, paste0)
+  ## Write slurm preamble to a shell script
+  if(slurm){
+    con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
+    ram_requested<-parallel_threads*ram_per_node
+    writeLines(c("#!/bin/bash",
+                 paste0("#SBATCH -n ",ncores," # Number of cores"),
+                 "#SBATCH -N 1 # Ensure that all cores are on one machine",
+                 paste0("#SBATCH -t ",days_requested,"-00:00 # Runtime in D-HH:MM"),
+                 paste0("#SBATCH -p ",slurm_partition," # Partition to submit to"),
+                 paste0("#SBATCH --mem=",ram_requested," # Memory pool for all cores (see also --mem-per-cpu)"),
+                 paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.out")," # File to which STDOUT will be written"),
+                 paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.err"), " # File to which STDERR will be written"),
+                 'module add bowtie2'),con=con)
+    argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt")
+  } else{
+    #If we aren't using slurm, set the number of chunks to one.
+    nchunks<-1
+    argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt")
+  }
+  if(!paired){
+    #get file names, commandline for single-end
+    # keep<-paste0(keep,".fastq")
+    myfiles<-file.path(fastq_dir,keep)
+    fragLenArg <- ''
+    bamArg <- ''
+    if(!is.null(frag_mean) && !is.null(frag_sd)){
+      fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
     }
-                                        #Chunking for slurm
-    .chunkDataFrame<-function(df=pairs,nchunks=nchunks){        
-        groupsize<-nrow(df)%/%nchunks
-        split(as.data.frame(df),gl(nchunks,groupsize,length=nrow(df)))
-    }
-    rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
-    done <- str_replace(list.files(path=rsem_dir,pattern="\\.genes\\.results$"), '\\.genes\\.results$', '')
-    #browser()
-    if(!fromBAM){
-        fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
-        todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), '(_[12])?\\.fastq$', ''))
-        extension <- if(paired) c('_1.fastq', '_2.fastq') else '.fastq'
+    if(fromBAM){
+      command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads*bowtie_threads," rsem-calculate-expression --no-bam-output --bam {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)
     } else{
-        fastq_dir <- getConfig()[["subdirs"]][["BAM"]]
-        orig <- list.files(path=fastq_dir,pattern="\\.bam$")
-        todo <- str_replace(orig, '(\\.transcript)?\\.bam$', '')
-        extension <- str_match(orig[1], '(\\.transcript)?\\.bam$')[1,1]
+      command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)
     }
-    keep <- setdiff(todo, done)
-    
-    if(length(keep)==0){
-        message("Expression already calculated")
-        return()
+  }else{
+    #get file names, commandline for Paired end
+    fastq_files<-file.path(fastq_dir,sort(keep))
+    if(!is.null(frag_mean) || !is.null(frag_sd)){
+      warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
     }
-    reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
-    reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
-    keep <- outer(keep, extension, paste0)
-
-    ## Write slurm preamble to a shell script
-    if(slurm){
-        con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
-        ram_requested<-parallel_threads*ram_per_node
-        writeLines(c("#!/bin/bash",
-                     paste0("#SBATCH -n ",ncores,"                 # Number of cores"),
-                     "#SBATCH -N 1                 # Ensure that all cores are on one machine",
-                     paste0("#SBATCH -t ",days_requested,"-00:00           # Runtime in D-HH:MM"),
-                     paste0("#SBATCH -p ",slurm_partition,"    # Partition to submit to"),
-                     paste0("#SBATCH --mem=",ram_requested,"            # Memory pool for all cores (see also --mem-per-cpu)"),
-                     paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.out"),"      # File to which STDOUT will be written"),
-                     paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.err"), "     # File to which STDERR will be written"),
-                     'module add bowtie2'),con=con)
-        argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt")
+    if(fromBAM){
+      myfiles<-file.path(fastq_dir,keep)
+      command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads*bowtie_threads," rsem-calculate-expression --no-bam-output --paired-end --bam {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)
     } else{
-                                        #If we aren't using slurm, set the number of chunks to one.
-        nchunks<-1
-        argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt")
+      pairs<-matrix(fastq_files,ncol=2,byrow=TRUE)
+      myfiles<-cbind(pairs,gsub("\\.fastq","",gsub("_[12]\\.","\\.",basename(pairs[,1]))))
+      command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ", argumentFile)
     }
-
-    if(!paired){
-                                        #get file names, commandline for single-end
-        keep<-paste0(keep,".fastq")
-        myfiles<-file.path(fastq_dir,keep)
-        fragLenArg <- ''
-        bamArg <- ''
-        if(!is.null(frag_mean) && !is.null(frag_sd)){
-            fragLenArg <- paste0(" --fragment-length-mean ", frag_mean, " --fragment-length-sd ", frag_sd)
-        }
-        
-        if(fromBAM){
-            command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads*bowtie_threads," rsem-calculate-expression --no-bam-output --bam {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)
-        } else{
-            command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)
-        }
-    }else{
-                                        #get file names, commandline for Paired end
-        fastq_files<-file.path(fastq_dir,sort(keep))
-      
-        if(!is.null(frag_mean) || !is.null(frag_sd)){
-            warning('`frag_mean` and `frag_sd` ignored for paired-end reads.')
-        }
-        if(fromBAM){
-             myfiles<-file.path(fastq_dir,keep)
-            command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads*bowtie_threads," rsem-calculate-expression --no-bam-output --bam --paired-end {1} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)  
-        } else{
-            pairs<-matrix(fastq_files,ncol=2,byrow=TRUE)
-            myfiles<-cbind(pairs,gsub("\\.fastq","",gsub("_[12]\\.","\\.",basename(pairs[,1]))))
-            command<-paste0("cd ",rsem_dir," && parallel -n 3 -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," --paired-end {1} {2} ",file.path(reference_genome_path,reference_genome_name)," {3.} :::: ", argumentFile)
-
-        }
-    }
-    
-    ## for both, divide split the files into chunks (maybe just 1) and write the argument chunks
-    chunked<-.chunkDataFrame(data.frame(files=myfiles),nchunks)
-    for(i in seq_along(chunked)){
-        con2=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt")))
-        writeLines(t(chunked[[i]]),con=con2)
-        close(con2)
-    }
-
-    if(slurm){
-        ## add the rsem command to the shell script
-        message('Using ', nchunks , 'clusters ')
-        message("Sending ", command)
-        writeLines(paste0(command,"\n"),con=con)      
-        close(con)
-        slurm_command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
-        system(slurm_command)
-    } else{
-        ## or just execute it
-        cat(command)
-        system(command)
-    }
+  }
+  ## for both, divide split the files into chunks (maybe just 1) and write the argument chunks
+  chunked<-.chunkDataFrame(data.frame(files=myfiles),nchunks)
+  for(i in seq_along(chunked)){
+    con2=file(file.path(getConfig()[["subdirs"]][["FASTQ"]],paste0("arguments_chunk_",i,".txt")))
+    writeLines(t(chunked[[i]]),con=con2)
+    close(con2)
+  }
+  if(slurm){
+    ## add the rsem command to the shell script
+    message('Using ', nchunks , 'clusters ')
+    message("Sending ", command)
+    writeLines(paste0(command,"\n"),con=con)
+    close(con)
+    slurm_command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
+    system(slurm_command)
+  } else{
+    ## or just execute it
+    cat(command)
+    system(command)
+  }
 }
+
 
 #' Assemble an expression matrix of all results
 #' 
@@ -1316,53 +1314,174 @@ qualityRNASeQC = function(picard.path="/home/jdeng/bin/picard-tools-1.110/", nco
 
 
 #' Generate QualityControl Matric.
-#' 
-#' calculate qc statistics: nGenesOn, librarySize, alignment percentage to reference genome, exon mapping rate, 
+#'
+#' calculate qc statistics: nGenesOn, librarySize, alignment percentage to reference genome, exon mapping rate,
 #' and per base sequence quality output by FASTQC software
-#' 
-#' @param paired \code{logical} specify whether you have paried reads or not. 
+#'
+#' @param paired \code{logical} specify whether you have paried reads or not.
 #' @export
 QualityControl <- function(paired=FALSE){
-  library(XML)
-  countMatrix <-  fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_count_matrix.csv",full.names=TRUE))[ ,-1,with=FALSE]
-  result <- data.table(Sample=colnames(countMatrix), nGeneOn = colSums(countMatrix>0))
+  countMatrix <- fread(list.files(getConfig()[["subdirs"]][["RSEM"]],pattern="rsem_count_matrix.csv",full.names=TRUE))[ ,-1,with=FALSE]
+  sample <- gsub("Aligned.toTranscriptome.out", "", colnames(countMatrix))
+  result <- data.table(Sample=sample, nGeneOn = colSums(countMatrix>5))
   ### alignment rate
-  tophat.dir <- getConfig()[["subdirs"]][["TOPHAT"]]
-  alignSummary.files <- list.files(tophat.dir, "align_summary.txt$", full = T, recursive = T)
-  alignFileNames <- sapply(strsplit(alignSummary.files, "/"), function(x) x[length(x)-1])
-  if(paired){
-    res_tophat <- do.call(rbind, lapply(alignSummary.files, function(i) {
-      res <- scan(i, what = "", sep=":", skip=1)
-      libSize <- as.numeric(res[2])
-      alignRate <- as.numeric(substr(res[21], 1, 4))/100
-      cbind(libSize, alignRate)}))
-  }else{
-    res_tophat <- t(sapply(alignSummary.files, function(i) {
-      res <- scan(i, what = "", sep=":", skip=1)
-      libSize <- as.numeric(res[2])
-      alignRate <- as.numeric(substr(res[7], 1, 4))/100
-      data.frame(libSize, alignRate)}))
-  }
-  res_tophat <- data.table(Sample=alignFileNames, res_tophat)
-  result <- merge(result, res_tophat, by="Sample")
-  ##### exon rate
-  rnaseqc <- list.files(getConfig()[["subdirs"]][["RNASEQC"]], "report.html", full=T)
-  exonRate <- data.table(ldply(lapply(rnaseqc, function(x) readHTMLTable(x, stringsAsFactors = F)[[4]][ ,c(1,4)])))
-  result <- merge(result, exonRate, by="Sample") 
-  setnames(result, "Exonic Rate", "exonRate")
-  result[ ,exonRate:=as.numeric(exonRate)]
+  bam.dir <- getConfig()[["subdirs"]][["BAM"]]
+  rsem.dir <- getConfig()[["subdirs"]][["RSEM"]]
+  starAlignSummary <- list.files(bam.dir, "Log.final.out$", full = T, recursive = F)
+  rsemAlignSummary <- list.files(rsem.dir, ".cnt$", full = T, recursive = T)
+  rsemFileNames <- gsub("Aligned.toTranscriptome.out.cnt", "", basename(rsemAlignSummary))
+  starFileNames <- gsub("Log.final.out", "", basename(starAlignSummary))
+  rsemAlignSummary <- rsemAlignSummary[match(starFileNames, rsemFileNames)]
+  res <- t(sapply(seq(starAlignSummary), function(i) {
+    print(i)
+    starIn <- read.delim(starAlignSummary[i], stringsAsFactors=FALSE)
+    libSize <- as.numeric(starIn[4,2])
+    alignRate <- (as.numeric(sub("%","",starIn[8,2]))+as.numeric(sub("%","",starIn[23,2])))/100
+    rsemIn <- scan(rsemAlignSummary[i], what = "", nlines=1)
+    exonRate <- as.numeric(rsemIn[2])/libSize
+    cbind(libSize, alignRate, exonRate)}))
+  
+  res <- data.table(Sample=starFileNames, libSize=res[,1], alignRate=res[,2], exonRate=res[,3])
+  result <- merge(result, res, by="Sample")
   ###### Fastqc
   fastqc <- list.files(getConfig()[["subdirs"]][["FASTQC"]], "summary.txt", full = T, recursive = T)
-  fastqcFileNames <- sub("_fastqc", "", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]))
+  fastqcFileNames <- sub("_R[12]_fastqc", "", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]))
   if(!paired){
     res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
     res_fastqc[res_fastqc == "WARN"] <- "PASS"
-    res_fastqc <- data.table(Sample=fastqcFileNames, res_fastqc)
+    res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
+    result <- merge(result, res_fastqc, by="Sample")
+  }else{
+    res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
+    res_fastqc[res_fastqc == "WARN"] <- "PASS"
+    res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
+    res_fastqc <- res_fastqc[,.SD[,paste(fastqc, collapse="_"), by=Sample]]
     result <- merge(result, res_fastqc, by="Sample")
   }
-  write.csv(result, file=file.path(getConfig()[["subdirs"]][["OUTPUT"]],"quality_control_matrix.csv"), row.names=TRUE)
+  write.csv(result, file=file.path(getConfig()[["subdirs"]][["OUTPUT"]],"quality_control_matrix.csv"), row.names=FALSE)
   result
 }
+
+#' Build a genome index for STAR
+#'
+#' Builds a genome Index at `Utils/Reference_Genome/STARIndex`
+#'
+#' You must specify the Utils path if it is not already defined, and have your genome and annotation file in a folder titled
+#' `Reference_Genome`. This function will construct the genome index using STAR tools.
+#' The command line is the default shown in the documentation.
+#' A fasta_file must be provided.
+#' gtf_file is highly recommended, and if not provided, STAR will run without annotations.
+#' @param path \code{character} specifying an \emph{absolute path} path to the Utils directory.
+#' @param gtf_file \code{character} the name of the gtf file.
+#' @param fasta_file \code{character} the name of the fasta file, must be specified
+#' @param star_threads \code{integer} specify how many threads star should use.
+#' @param name \code{character} the name of the genome output
+#' @export
+
+buildGenomeIndexSTAR = function (path = NULL, gtf_file = "", fasta_file = NULL, star_threads = 1, name=NULL){
+  if (is.null(fasta_file)){
+    stop("You must provide a fasta_file")
+  }
+  if (is.null(path) & inherits(try(getConfig()[["subdirs"]][["Utils"]], silent = TRUE), "try-error")) {
+    stop("Please specify where to build the reference genome")
+  }
+  else if (is.null(path)) {
+    path <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/STARIndex")
+  }
+  else {
+    subdirs <- getConfig()[["subdirs"]]
+    subdirs[["Utils"]] <- path
+    assignConfig("subdirs", subdirs)
+    path <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/STARIndex")
+  }
+  if (substr(path, 1, 1) != "/") {
+    stop("'path' must be an absolute path")
+  }
+  dir.create(path, showWarnings=FALSE)
+  if (gtf_file == "") {
+    gtfopt <- ""
+  }
+  else {
+    gtfopt <- "--sjdbGTFfile"
+    gtf.file <- file.path(paste0(getConfig()[["subdirs"]][["Utils"]], "/Reference_Genome/", gtf_file))
+  }
+  fasta.file <- file.path(paste0(getConfig()[["subdirs"]][["Utils"]], "/Reference_Genome/", fasta_file))
+  if (length(fasta.file) > 1) {
+    fasta.file <- paste(fasta.file, collapse = ",")
+  }
+  if (length(list.files(pattern="SAindex", path=path)) == 0) {
+    command = paste0("STAR --runThreadN ", star_threads, " --runMode genomeGenerate --genomeDir ", path, " --genomeFastaFiles ", fasta.file, " ", gtfopt, " ", gtf.file)
+    system(command)
+  }
+  else {
+    message("Reference Genome Found")
+  }
+  assignConfig("reference_genome_name", name)
+}
+
+
+
+#' Use the STAR tool to align the reads 
+#'
+#' Use the STAR tool to align reads and generate transcriptome bam files
+#'
+#' Uses STAR to align reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes
+#' paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
+#' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
+#' and read 2 is assumed to be downstream.
+#' The number of parallel_threads*star_threads should not be more than the number of cores available on your system.
+#' @param parallel_threads \code{integer} specify how many parallel processes to spawn
+#' @param star_threads \code{integer} specify how many threads star should use.
+#' @param paired \code{logical} specify whether you have paried reads or not.
+#' @param paired_pattern \code{character} specify the suffix of the paried-end fastq file names.
+#' @export
+AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paired_pattern=c("_1.fastq", "_2.fastq")){
+  library(stringr)
+  ncores<-parallel_threads*star_threads
+  if(ncores>parallel::detectCores()){
+    stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
+  }
+  .chunkDataFrame<-function(df=pairs){
+    groupsize<-nrow(df)
+    split(as.data.frame(df),gl(1,groupsize,length=nrow(df)))
+  }
+  star_dir <- getConfig()[["subdirs"]][["BAM"]]
+  done <- str_replace(list.files(path = star_dir, pattern = "\\Aligned.toTranscriptome.out.bam$"), "Aligned.toTranscriptome.out.bam", "")
+  fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
+  if(paired){
+    todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), paired_pattern, ''))
+  }else{
+    todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), "\\.fastq$", ''))
+  }
+  extension <- if(paired) paired_pattern else '.fastq'
+  keep <- setdiff(todo, done)
+  if(length(keep)==0){
+    message("Expression already calculated")
+    return()
+  }
+  index <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/STARIndex")
+  keep <- outer(keep, extension, paste0)
+  argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt")
+  if(!paired){
+    #get file names, commandline for single-end
+    myfiles<-cbind(file.path(fastq_dir,keep), gsub(".fastq", "",keep))
+    command<-paste0("cd ",star_dir," && parallel -n 2 -j ",parallel_threads," STAR --runThreadN ", star_threads, " --outFileNamePrefix {2} --genomeDir ", index, " --readFilesIn {1} --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM :::: ", argumentFile)
+  }else{
+    #get file names, commandline for Paired end
+    fastq_files<-file.path(fastq_dir,sort(keep))
+    pairs<-matrix(fastq_files,ncol=2,byrow=TRUE)
+    myfiles<-cbind(pairs,gsub(paired_pattern[1], "", basename(pairs[,1])))
+    command<-paste0("cd ",star_dir," && parallel -n 3 -j ",parallel_threads," STAR --runThreadN ", star_threads, " --outFileNamePrefix {3} --genomeDir ", index, " --readFilesIn {1} {2} --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM :::: ", argumentFile)
+  }
+  ## for both, divide split the files into chunks (maybe just 1) and write the argument chunks
+  chunked<-.chunkDataFrame(data.frame(files=myfiles))
+  con2=file(file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt"))
+  writeLines(t(chunked[[1]]),con=con2)
+  close(con2)
+  cat(command)
+  system(command)
+}
+
 
 
 
