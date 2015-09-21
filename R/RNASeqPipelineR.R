@@ -1350,12 +1350,14 @@ QualityControl <- function(paired=FALSE){
     res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
     res_fastqc[res_fastqc == "WARN"] <- "PASS"
     res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
+    res_fastqc$Sample <- gsub("_fastqc", "", res_fastqc$Sample)
     result <- merge(result, res_fastqc, by="Sample")
   }else{
     res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
     res_fastqc[res_fastqc == "WARN"] <- "PASS"
     res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
     res_fastqc <- res_fastqc[,.SD[,paste(fastqc, collapse="_"), by=Sample]]
+    res_fastqc$Sample <- gsub("_fastqc", "", res_fastqc$Sample)
     result <- merge(result, res_fastqc, by="Sample")
   }
   write.csv(result, file=file.path(getConfig()[["subdirs"]][["OUTPUT"]],"quality_control_matrix.csv"), row.names=FALSE)
