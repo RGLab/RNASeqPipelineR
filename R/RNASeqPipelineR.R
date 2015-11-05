@@ -1345,8 +1345,13 @@ QualityControl <- function(paired=FALSE){
   result <- merge(result, res, by="Sample")
   ###### Fastqc
   fastqc <- list.files(getConfig()[["subdirs"]][["FASTQC"]], "summary.txt", full = T, recursive = T)
-  fastqcFileNames <- sub("_R[12]_fastqc", "", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]))
-  if(!paired){
+  
+  ## remove R[12]...fastqc suffix from file name. Initial (.*) causes right hand semantics so non-greedy matches and
+  ## captures the fle name without the suffix.
+  ## Extra complicated regexp just in case someone has inserted an R1 or R2 in file name before the read pair identifier
+  fastqcFileNames <- sub("(.*)_R[12].*_fastqc$", "\\1", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]), perl=TRUE)
+
+   if(!paired){
     res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
     res_fastqc[res_fastqc == "WARN"] <- "PASS"
     res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
@@ -1363,6 +1368,8 @@ QualityControl <- function(paired=FALSE){
   write.csv(result, file=file.path(getConfig()[["subdirs"]][["OUTPUT"]],"quality_control_matrix.csv"), row.names=FALSE)
   result
 }
+
+
 
 #' Build a genome index for STAR
 #'
