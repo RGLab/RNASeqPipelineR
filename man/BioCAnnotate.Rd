@@ -5,7 +5,7 @@
 \title{Annotate the features using BioConductor annotation packages}
 \usage{
 BioCAnnotate(annotation_library = "TxDb.Hsapiens.UCSC.hg38.knownGene",
-  force = FALSE, lib = "org.Hs.eg.db")
+  force = FALSE, lib = "org.Hs.eg.db", na.rm = TRUE)
 }
 \arguments{
 \item{annotation_library}{\code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.}
@@ -13,6 +13,8 @@ BioCAnnotate(annotation_library = "TxDb.Hsapiens.UCSC.hg38.knownGene",
 \item{force}{\code{logical} force the annotation step to re-run}
 
 \item{lib}{\code{character} name of library to load}
+
+\item{na.rm}{Should transcripts without entrez IDs or gene symbols be removed?}
 }
 \description{
 Annotate the transcripts using bioConductor annotation packages.
