@@ -643,7 +643,9 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param fromBAM \code{logical} if \code{TRUE} then RSEM will attempt to use previously aligned BAM files, in the \code{BAM} directory, rather than fastq files. The file names expected to end with \code{.transcript.bam}. See RSEM documentation for the format these files must obey.
 #' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 #' @export
-RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=FALSE, frag_mean=NULL, frag_sd=NULL,nchunks=10,days_requested=5,slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=bowtie_threads*parallel_threads*1200, fromBAM=FALSE, fromSTAR=FALSE){
+RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=FALSE, frag_mean=NULL, frag_sd=NULL,
+                                    nchunks=10,days_requested=5,slurm=FALSE, slurm_partition=NULL, #slurm_partition="gottardo_r",
+                                    ram_per_node=bowtie_threads*parallel_threads*1200, fromBAM=FALSE, fromSTAR=FALSE){
   ncores<-parallel_threads*bowtie_threads
   if(ncores>parallel::detectCores()&!slurm){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
@@ -687,7 +689,7 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
                  paste0("#SBATCH -n ",ncores," # Number of cores"),
                  "#SBATCH -N 1 # Ensure that all cores are on one machine",
                  paste0("#SBATCH -t ",days_requested,"-00:00 # Runtime in D-HH:MM"),
-                 paste0("#SBATCH -p ",slurm_partition," # Partition to submit to"),
+                 ifelse(is.null(slurm_partition),"", paste0("#SBATCH -p ",slurm_partition," # Partition to submit to")),
                  paste0("#SBATCH --mem=",ram_requested," # Memory pool for all cores (see also --mem-per-cpu)"),
                  paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.out")," # File to which STDOUT will be written"),
                  paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.err"), " # File to which STDERR will be written"),
