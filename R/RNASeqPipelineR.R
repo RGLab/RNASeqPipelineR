@@ -621,6 +621,71 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
   assignConfig("reference_genome_name",name)
 }
 
+
+#' Build a reference genome 2
+#' 
+#' Builds a reference genome at `Utils/Reference_Genome`
+#' 
+#' You must specify the Utils path if it is not already defined, and have your genome in a folder titled
+#' `Reference_Genome`. This function will construct the reference genome using RSEM tools.
+#' The command line is the default shown in the documentation.
+#' `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
+#' If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
+#' @param path \code{character} specifying an \emph{absolute path} path to the Utils directory.
+#' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`
+#' @param fasta_file \code{character} the name of the fasta file, must be specified
+#' @param name \code{character} the name of the genome output.
+#' @param gff3 \code{boolean} when gtf_file is gff3 format set it to TRUE to add "--sjdbGTFtagExonParentTranscript gene".
+#' @param additional_param \code{character} default "".  Additional parameters to pass.
+#' @export
+
+buildGenomeIndexSTAR2 = function (path = NULL, gtf_file = "", fasta_file = NULL, star_threads = 1, name=NULL, gff3 = FALSE, additional_param = ""){
+  if (is.null(fasta_file)){
+    stop("You must provide a fasta_file")
+  }
+
+  if (is.null(path) & inherits(try(getConfig()[["subdirs"]][["Utils"]], silent = TRUE), "try-error")) {
+    stop("Please specify where to build the reference genome")
+  }
+  else if (is.null(path)) {
+    path <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/STARIndex")
+  }
+  else {
+    subdirs <- getConfig()[["subdirs"]]
+    subdirs[["Utils"]] <- path
+    assignConfig("subdirs", subdirs)
+    path <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/STARIndex")
+  }
+  
+  if (substr(path, 1, 1) != "/") {
+    stop("'path' must be an absolute path")
+  }
+  dir.create(path, showWarnings=FALSE)
+  if (gtf_file == "") {
+    gtfopt <- ""
+  }
+  else {
+    gtfopt <- "--sjdbGTFfile"
+    gtf.file <- file.path(paste0(getConfig()[["subdirs"]][["Utils"]], "/Reference_Genome/", gtf_file))
+  }
+  gffopt=""
+  if(gff3==TRUE){
+    gffopt<- "--sjdbGTFtagExonParentTranscript gene"
+  }
+  fasta.file <- file.path(paste0(getConfig()[["subdirs"]][["Utils"]], "/Reference_Genome/", fasta_file))
+  if (length(fasta.file) > 1) {
+    fasta.file <- paste(fasta.file, collapse = ",")
+  }
+  if (length(list.files(pattern="SAindex", path=path)) == 0) {
+    command = paste0("STAR --runThreadN ", star_threads, " --runMode genomeGenerate --genomeDir ", path, " --genomeFastaFiles ", fasta.file, " ", gtfopt, " ", gtf.file, " ", gffopt , " ", additional_param  )
+    system(command)
+  }
+  else {
+    message("Reference Genome Found")
+  }
+  assignConfig("reference_genome_name", name)
+}
+
 #' Use the RSEM tool to align the reads
 #'
 #' Use the RSEM tool to align reads
