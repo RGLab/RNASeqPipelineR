@@ -721,7 +721,9 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
     split(as.data.frame(df),gl(nchunks,groupsize,length=nrow(df)))
   }
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
-  done <- str_replace(list.files(path=rsem_dir,pattern="\\.genes\\.results$"), '\\.genes\\.results$', '')
+  ## parse RSEM output to get names of fastq files which have already been annotated.
+  done <- str_replace(list.files(path=rsem_dir,pattern="\\.genes\\.results$"), 'Aligned\\.toTranscriptome\\.out\\.genes\\.results$', '')
+
   #browser()
   if(!fromBAM){
     fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
@@ -1416,7 +1418,8 @@ QualityControl <- function(paired=FALSE){
   ## remove R[12]...fastqc suffix from file name. Initial (.*) causes right hand semantics so non-greedy matches and
   ## captures the fle name without the suffix.
   ## Extra complicated regexp just in case someone has inserted an R1 or R2 in file name before the read pair identifier
-  fastqcFileNames <- sub("(.*)_R[12].*_fastqc$", "\\1", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]), perl=TRUE)
+  ## added ? after R as it is possible for fastq files to not have the R. (? matches 0 or 1)
+  fastqcFileNames <- sub("(.*)_R?[12].*_fastqc$", "\\1", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]), perl=TRUE)
 
    if(!paired){
     res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
