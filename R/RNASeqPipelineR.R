@@ -908,9 +908,10 @@ RSEMSummarizeMapping <- function(dir, log=TRUE, plot=TRUE){
 #' @param annotation_library \code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.
 #' @param force \code{logical} force the annotation step to re-run
 #' @param lib \code{character} name of library to load
+#' @param na.rm Should transcripts without entrez IDs or gene symbols be removed?
 #' @export
 #' @import annotate AnnotationDbi
-BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE,lib="org.Hs.eg.db"){
+BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE,lib="org.Hs.eg.db", na.rm=TRUE){
   featuredata_outfile<-"rsem_fdata.csv"
   if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
     message("Annotation already done, skipping. Use force=TRUE to rerun.")
@@ -928,12 +929,14 @@ BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",fo
   tx_to_gid <- rsem_txs_table[,list(transcript_id=strsplit(as.character(transcript_ids),",")[[1]]),by="gene_id"]
   
   # map the transcripts to entrez gene ids
-  tx_to_eid <- na.omit(data.table(AnnotationDbi::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME")))
+
+  na.fun <- if(na.rm) na.omit else function(x) x
+  tx_to_eid <- na.fun(data.table(AnnotationDbi::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME")))
   setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
   
   # Add gene symbol
   tx_to_eid[!is.na(entrez_id),gene_symbol:=getSYMBOL(tx_to_eid[!is.na(entrez_id),entrez_id], data=gsub("\\.db","",lib))]
-  tx_to_eid<-tx_to_eid[!is.na(gene_symbol)]
+  tx_to_eid<-tx_to_eid[!is.na(gene_symbol) | !na.rm]
   # merge all to map information to RSEM gene_ids
   tx_table <- merge(tx_to_gid, tx_to_eid, by="transcript_id")
   tx_table_reduced <- tx_table[,list(entrez_id=paste(unique(entrez_id),collapse=","), transcript_id=paste(unique(transcript_id),collapse=","), gene_symbol=paste(unique(gene_symbol),collapse=",")),by="gene_id"]
