@@ -158,12 +158,64 @@ configure_project <- function(subdirectories=NULL,fromDisk=FALSE){
 
 #' Get the configuration for the project from the namespace
 #' 
-#' Retrieve the configuration for the project from the namespace
+#' Retrieve the configuration for the project from the namespace. If
+#' configuration not found exit with error.
+#' 
+#' @return Returns configuration structure or stops with error if not found
 #' @export
 getConfig<-function(){
   ns <- getNamespace("RNASeqPipelineR")
-  get("rnaseqpipeliner_configuration", ns)
+  config <- get("rnaseqpipeliner_configuration", ns)
+  if(length(config) == 0) {
+       stop("Configuration not found: Have you run loadProject or buildReference (for Utils directory)?")
+  }
+  return(config)
 }
+
+
+#' Retrieve full path to 'dir' in project configuration structure
+#'
+#' Retrieve full path to 'dir' in project configuration structure. If 'dir'
+#' not found exit with error.
+#'
+#' @param dir \code{character} directory that path is required for
+#' @return \code{character} full path to directory
+getConfigDir <- function(dir) {
+
+    path <- getConfig()[["subdirs"]]
+
+    if(is.null(path)) stop("subdirs list not found. Configuration corrupted!")
+    if( is.na(match(dir, names(path))) ) {
+        stop(paste("directory", dir, "not found in project configuration"))
+    }
+
+    return(getConfig()[["subdirs"]][[dir]])
+} ## end getConfigDir
+
+
+#' Retrieve full path to 'dir/file' in project configuration structure
+#'
+#' Retrieve full path to 'dir/file' in project configuration structure. If
+#' file not found exit with error.
+#'
+#' @param dir \code{character} directory containing file
+#' @param file \code{character} file sought after
+#' @return \code{character} full path to directory
+getConfigFile <- function(dir, file) {
+
+    ## construct path
+    path <- getConfigDir(dir)
+    filey <- paste(path, file, sep="/")
+
+    ## error check
+    if(!file.exists(filey)) {
+        stop(paste(filey, "not found"))
+    }
+  
+    ## return file path
+    return(filey)
+} ## end getConfigFile
+
 
 #' Assign a new element to the RNASeqPipelineR configuration
 #' 
@@ -189,7 +241,7 @@ assignConfig<-function(name,value){
 #' Load data from Immport tables in the \code{Tab} directory.
 #' Stores the tables in the configuration in the namespace.
 #' 
-#' @param \code{integer} specifies whether to print warnings. -1 suppresses warnings (default)
+#' @param warn \code{integer} specifies whether to print warnings. -1 suppresses warnings (default)
 #' @param verbose \code{integer} how verbose should we be about what's happening. 0 (default) is quiet.
 #' @export
 loadImmportTables <- function(warn=-1,verbose=0){
@@ -244,6 +296,7 @@ loadImmportTables <- function(warn=-1,verbose=0){
 #' 
 #' Downloads and stores the SRAdb sqlite database if necessary and stores it in 
 #' the Utils folder.
+#' @param path \code{character} path to SRAmetadb.sqlite file exists or will be placed
 #' @export
 getAndConnectSRAdb <- function(path=NULL){
   if(is.null(path)){
@@ -415,7 +468,7 @@ annotateSRA <- function(){
 #' @importFrom knitr kable
 SRAOverview <- function(){
   pData <- getConfig()[["immport_tables"]][["pData"]]
-  kable(head(pData), format = "markdown")
+  kable(utils::head(pData), format = "markdown")
 }
 
 #' Convert SRA files to FastQ
@@ -562,63 +615,11 @@ summarizeDuplication <- function(){
     return(y)})
   fastqc_data <- rbindlist(fastqc_list, fill=TRUE)
   fastqc_data[,`duplication level`:=factor(`duplication level`, levels=c(1:9, c('>10', '>50', '>100', '>500', '>1k', '>5k')))]
-  M <- data.table:::melt.data.table(fastqc_data, measure.vars=c('pct dedup', 'pct total'))
+  M <- data.table::melt.data.table(fastqc_data, measure.vars=c('pct dedup', 'pct total'))
   print(ggplot(M, aes(x=`duplication level`, y=value))+geom_boxplot() + facet_wrap(~variable))
   U <- unique(fastqc_data[,list(file, totaldup)])
   print(ggplot(U, aes(x=totaldup)) + geom_density() + geom_text(aes(x=totaldup, y=0, label=file), size=2, angle=90, hjust=0))
   invisible(fastqc_data)
-}
-
-#' Build a reference genome
-#' 
-#' Builds a reference genome at `Utils/Reference_Genome`
-#' 
-#' You must specify the Utils path if it is not already defined, and have your genome in a folder titled
-#' `Reference_Genome`. This function will construct the reference genome using RSEM tools.
-#' The command line is the default shown in the documentation.
-#' `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
-#' If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
-#' @param path \code{character} specifying an \emph{absolute path} path to the Utils directory.
-#' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`
-#' @param fasta_file \code{character} the name of the fasta file, must be specified
-#' @param name \code{character} the name of the genome output.
-#' @export
-buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
-  if(is.null(fasta_file)|is.null(name))
-    stop("You must provide a fasta_file  and a genome name")
-  if(is.null(path)&inherits(try(getConfig()[["subdirs"]][["Utils"]],silent=TRUE),"try-error")){
-    stop("Please specify where to build the reference genome")
-  }else if(is.null(path)){
-    path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
-  } else{
-    subdirs<-getConfig()[["subdirs"]]
-    subdirs[["Utils"]]<-path
-    assignConfig("subdirs",subdirs) #save the user-provided path
-    path = file.path(path,"Reference_Genome")
-  }
-  if(substr(path, 1, 1) != '/') stop("'path' must be an absolute path")
-  if(gtf_file==""){
-    gtfopt<-""
-    isoforms<-""
-    isoformsOpt<-""
-  }
-  else{
-    gtfopt <- "--gtf"
-    isoforms<-"knownIsoforms.txt"
-    isoformsOpt<-"--transcript-to-gene-map"
-  }
-  #check if the reference genome has already been built
-  if(length(fasta_file)>1){
-    fasta_file<-paste(fasta_file,collapse=",")
-  }
-  if(length(list.files(pattern=paste0(name,".chrlist"),path=file.path(getConfig()[["subdirs"]]["Utils"],"Reference_Genome")))==0){
-    command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoforms," --bowtie2 ",fasta_file," ",name," ")
-    system(command)
-  }else{
-    message("Reference Genome Found")
-  }
-  #set the reference genome name
-  assignConfig("reference_genome_name",name)
 }
 
 
@@ -634,6 +635,7 @@ buildReference <- function(path=NULL,gtf_file="",fasta_file=NULL,name=NULL){
 #' @param path \code{character} specifying an \emph{absolute path} path to the Utils directory.
 #' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for a file named `knownIsoforms.txt`
 #' @param fasta_file \code{character} the name of the fasta file, must be specified
+#' @param star_threads \code{integer} number of threads to use when building index
 #' @param name \code{character} the name of the genome output.
 #' @param gff3 \code{boolean} when gtf_file is gff3 format set it to TRUE to add "--sjdbGTFtagExonParentTranscript gene".
 #' @param additional_param \code{character} default "".  Additional parameters to pass.
@@ -686,11 +688,11 @@ buildGenomeIndexSTAR2 = function (path = NULL, gtf_file = "", fasta_file = NULL,
   assignConfig("reference_genome_name", name)
 }
 
-#' Use the RSEM tool to align the reads
+#' Use the RSEM tool to annotate and quantify the reads
 #'
-#' Use the RSEM tool to align reads
+#' Use the RSEM tool to annotate and quantify the reads
 #'
-#' Uses RSEM to align reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes
+#' Uses RSEM to quantify reads in FASTQ files against the reference genome. Optionally you can specify paired end reads. The code assumes
 #' paired reads have fastq files that differ by one character (i.e. sampleA_read1.fastq, sampleA_read2.fastq) and will perform
 #' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
 #' and read 2 is assumed to be downstream.
@@ -706,6 +708,8 @@ buildGenomeIndexSTAR2 = function (path = NULL, gtf_file = "", fasta_file = NULL,
 #' @param slurm_partition \code{character} the slurm partition to submit to. Ignored if slurm=FALSE
 #' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}
 #' @param fromBAM \code{logical} if \code{TRUE} then RSEM will attempt to use previously aligned BAM files, in the \code{BAM} directory, rather than fastq files. The file names expected to end with \code{.transcript.bam}. See RSEM documentation for the format these files must obey.
+#' @param fromSTAR \code{logical} if \code{TRUE} then RSEM will use the
+#' STAR notation for the BAM files
 #' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 #' @export
 RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=FALSE, frag_mean=NULL, frag_sd=NULL,
@@ -839,6 +843,9 @@ RSEMAssembleExpressionMatrix <- function(force=FALSE){
     
     # Bind all the data.tables to create a long data.table
     rsem_data_long <- rbindlist(rsem_list)
+
+    ## remove 'Aligned.toTranscriptome.out' from rsem file names
+    rsem_data_long[,sample_name := gsub("Aligned.toTranscriptome.out", "", sample_name)]
     
     # Rename a column, so that it's a bit R friendly
     setnames(rsem_data_long, "transcript_id(s)", "transcript_ids")
@@ -884,7 +891,7 @@ RSEMSummarizeMapping <- function(dir, log=TRUE, plot=TRUE){
         z <- data.table(file, total, mapped, unique)
         return(z)})
     fql <- rbindlist(fastqc_list)
-    fqlM <- data.table:::melt.data.table(fql, id.vars='file')
+    fqlM <- data.table::melt.data.table(fql, id.vars='file')
     if(log){
         fqlM[,value:=log10(value+1)]
     }
@@ -897,53 +904,6 @@ RSEMSummarizeMapping <- function(dir, log=TRUE, plot=TRUE){
     ggp <- ggplot(fqlM, aes(x=variable, y=value))+geom_boxplot() + geom_text(aes(label=ifelse(outlier, file, "")), size=2) + ylab(if(log) 'log10(reads+1)' else 'reads')
     if(plot) print(ggp)
     invisible(fqlM)
-}
-
-#' Annotate the features using BioConductor annotation packages
-#' 
-#' Annotate the transcripts using bioConductor annotation packages. 
-#' 
-#' Annotates the transcripts using the bioconductor annotation package specified in the
-#' annotation_library argument
-#' @param annotation_library \code{character} specifying the annotation package to use. "TxDb.Hsapiens.UCSC.hg38.knownGene" by default.
-#' @param force \code{logical} force the annotation step to re-run
-#' @param lib \code{character} name of library to load
-#' @param na.rm Should transcripts without entrez IDs or gene symbols be removed?
-#' @export
-#' @import annotate AnnotationDbi
-BioCAnnotate<-function(annotation_library="TxDb.Hsapiens.UCSC.hg38.knownGene",force=FALSE,lib="org.Hs.eg.db", na.rm=TRUE){
-  featuredata_outfile<-"rsem_fdata.csv"
-  if(!force&file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile))){
-    message("Annotation already done, skipping. Use force=TRUE to rerun.")
-    invisible(return(0))
-  }
-  do.call(library,(list(eval(annotation_library))))
-  #save the annotation library
-  assignConfig("annotation_library",annotation_library)
-  eval(as.call(list(library,as.name(lib))))
-  message("Annotating transcripts.")
-  txdb <- get(annotation_library)
-  rsem_txs_table <- fread(file.path(getConfig()[["subdirs"]][["RSEM"]],"rsem_txs_table.csv"))
-  
-  # create a table with one transcript per line
-  tx_to_gid <- rsem_txs_table[,list(transcript_id=strsplit(as.character(transcript_ids),",")[[1]]),by="gene_id"]
-  
-  # map the transcripts to entrez gene ids
-
-  na.fun <- if(na.rm) na.omit else function(x) x
-  tx_to_eid <- na.fun(data.table(AnnotationDbi::select(txdb, keys = tx_to_gid[,transcript_id], columns="GENEID", keytype="TXNAME")))
-  setnames(tx_to_eid, c("TXNAME", "GENEID"), c("transcript_id", "entrez_id"))
-  
-  # Add gene symbol
-  tx_to_eid[!is.na(entrez_id),gene_symbol:=getSYMBOL(tx_to_eid[!is.na(entrez_id),entrez_id], data=gsub("\\.db","",lib))]
-  tx_to_eid<-tx_to_eid[!is.na(gene_symbol) | !na.rm]
-  # merge all to map information to RSEM gene_ids
-  tx_table <- merge(tx_to_gid, tx_to_eid, by="transcript_id")
-  tx_table_reduced <- tx_table[,list(entrez_id=paste(unique(entrez_id),collapse=","), transcript_id=paste(unique(transcript_id),collapse=","), gene_symbol=paste(unique(gene_symbol),collapse=",")),by="gene_id"]
-  
-  # Write to disc and order by gene_id
-  message("Writing feature data to rsem_fdata.csv")
-  write.csv(tx_table_reduced[order(gene_id)], file=file.path(getConfig()[["subdirs"]][["RSEM"]],featuredata_outfile), row.names=FALSE)
 }
 
 #' Produce a report listing the tools and packages used by the pipeline.
@@ -1237,7 +1197,7 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
   genome.gtf <- file.path(getConfig()[["subdirs"]][["iGenome"]],"genes.gtf")
   genome.index <- file.path(getConfig()[["subdirs"]][["iGenome"]],"genome")
-  fastq.files <- list.files(fastq_dir, ".fastq$", full = T, recursive = T)
+  fastq.files <- list.files(fastq_dir, ".fastq$", full.names = TRUE, recursive = TRUE)
   if(paired){
     samples <- unique(sub("_..fastq", "", basename(fastq.files)))
     f1 <- fastq.files[match(paste0(samples,"_1.fastq"), basename(fastq.files))]
@@ -1319,11 +1279,11 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
 #' The sample file is the tab-delimited description of samples and their bams. The header of the file should be: SampleID BamFile Notes
 #' The BamFile should be the path to the input file
 .createSampleFile = function(){
-  bam.files <- list.files(getConfig()[["subdirs"]][["TOPHAT"]], "accepted_hits_added.bam$", full = T, recursive = T)
+  bam.files <- list.files(getConfig()[["subdirs"]][["TOPHAT"]], "accepted_hits_added.bam$", full.names = TRUE, recursive = TRUE)
   sampleid <- sapply(strsplit(bam.files, "/"), function(x) x[length(x)-1])
   note <- sapply(strsplit(sampleid, "_"), function(x) x[1])  
   dat <- data.frame("Sample ID" = sampleid, "Bam File" = bam.files, "Notes" = note, stringsAsFactors = F)
-  write.table(dat, file = paste0(getConfig()[["subdirs"]][["RAWANNOTATIONS"]],"/samplefile"), col.name = T, row.name = F, quote = F, sep = "\t")
+  write.table(dat, file = paste0(getConfig()[["subdirs"]][["RAWANNOTATIONS"]],"/samplefile"), col.names=TRUE, row.names=FALSE, quote=FALSE, sep = "\t")
   dat
 }
 
@@ -1356,7 +1316,7 @@ sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jing
 qualityRNASeQC = function(picard.path="/home/jdeng/bin/picard-tools-1.110/", ncores=6, rna_seqc.path="/home/jdeng/bin/RNA-SeQC_v1.1.7.jar", paired=FALSE){
   print("Step 1: Prepare bam files")
   genome.fa <- file.path(getConfig()[["subdirs"]][["iGenome"]], "genome.fa")
-  bam.files <- list.files(getConfig()[["subdirs"]][["TOPHAT"]], "accepted_hits.bam$", full = T, recursive = T)
+  bam.files <- list.files(getConfig()[["subdirs"]][["TOPHAT"]], "accepted_hits.bam$", full.names = TRUE, recursive = TRUE)
   mclapply(bam.files, function(s){
     # add read group to bam
     cmd <- paste0("nohup java -Xmx2048m -Xms2048m -jar ", picard.path, "AddOrReplaceReadGroups.jar I=", s, " O=", sub(".bam", "_added.bam", s), " SORT_ORDER=coordinate RGID=1 RGLB=1 RGPL=illumina RGPU=barcode RGSM=1")
@@ -1399,8 +1359,8 @@ QualityControl <- function(paired=FALSE){
   ### alignment rate
   bam.dir <- getConfig()[["subdirs"]][["BAM"]]
   rsem.dir <- getConfig()[["subdirs"]][["RSEM"]]
-  starAlignSummary <- list.files(bam.dir, "Log.final.out$", full = T, recursive = F)
-  rsemAlignSummary <- list.files(rsem.dir, ".cnt$", full = T, recursive = T)
+  starAlignSummary <- list.files(bam.dir, "Log.final.out$", full.names=TRUE, recursive=FALSE)
+  rsemAlignSummary <- list.files(rsem.dir, ".cnt$", full.names=TRUE, recursive=TRUE)
   rsemFileNames <- gsub("Aligned.toTranscriptome.out.cnt", "", basename(rsemAlignSummary))
   starFileNames <- gsub("Log.final.out", "", basename(starAlignSummary))
   rsemAlignSummary <- rsemAlignSummary[match(starFileNames, rsemFileNames)]
@@ -1416,7 +1376,7 @@ QualityControl <- function(paired=FALSE){
   res <- data.table(Sample=starFileNames, libSize=res[,1], alignRate=res[,2], exonRate=res[,3])
   result <- merge(result, res, by="Sample")
   ###### Fastqc
-  fastqc <- list.files(getConfig()[["subdirs"]][["FASTQC"]], "summary.txt", full = T, recursive = T)
+  fastqc <- list.files(getConfig()[["subdirs"]][["FASTQC"]], "summary.txt", full.names=TRUE, recursive=TRUE)
   
   ## remove R[12]...fastqc suffix from file name. Initial (.*) causes right hand semantics so non-greedy matches and
   ## captures the fle name without the suffix.
@@ -1425,13 +1385,13 @@ QualityControl <- function(paired=FALSE){
   fastqcFileNames <- sub("(.*)_R?[12].*_fastqc$", "\\1", sapply(strsplit(fastqc, "/"), function(x) x[length(x)-1]), perl=TRUE)
 
    if(!paired){
-    res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
+    res_fastqc <- sapply(fastqc, function(i) read.delim(i, header=FALSE, sep="\t", stringsAsFactors=FALSE)[2,1])
     res_fastqc[res_fastqc == "WARN"] <- "PASS"
     res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
     res_fastqc$Sample <- gsub("_fastqc", "", res_fastqc$Sample)
     result <- merge(result, res_fastqc, by="Sample")
   }else{
-    res_fastqc <- sapply(fastqc, function(i) read.delim(i, header = F, sep="\t", stringsAsFactors = F)[2,1])
+    res_fastqc <- sapply(fastqc, function(i) read.delim(i, header=FALSE, sep="\t", stringsAsFactors=FALSE)[2,1])
     res_fastqc[res_fastqc == "WARN"] <- "PASS"
     res_fastqc <- data.table(Sample=fastqcFileNames, fastqc=res_fastqc)
     res_fastqc <- res_fastqc[,.SD[,paste(fastqc, collapse="_"), by=Sample]]
@@ -1518,7 +1478,7 @@ buildGenomeIndexSTAR = function (path = NULL, gtf_file = "", fasta_file = NULL, 
 #' @param paired_pattern \code{character} specify the suffix of the paried-end fastq file names.
 #' @export
 AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paired_pattern=c("_1.fastq", "_2.fastq")){
-  library(stringr)
+  
   ncores<-parallel_threads*star_threads
   if(ncores>parallel::detectCores()){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
@@ -1541,7 +1501,7 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paire
     message("Expression already calculated")
     return()
   }
-  index <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/STARIndex")
+  index <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/")
   keep <- outer(keep, extension, paste0)
   argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt")
   if(!paired){
@@ -1568,3 +1528,286 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paire
 
 
 
+#' Sum all read counts for multiple instances of a single gene symbol.
+#' 
+#' A gene symbol can map to multiple UCSC gene cluster ids so in those
+#' instances all read counts mapped to a single gene symbol are summed.
+#' The summed read counts are returned in an Expression Set along with
+#' the feature data table and optionally an experimental design table.
+#' @param counts \code{matrix} table of read counts or tpms. Rows are genes and columns are
+#' samples
+#' @param fDat \code{data.frame} feature data - rows map to counts rows
+#' @param cDat \code{data.frame}. experimental design or phenotype data - rows map to counts columns
+#' @return ExpressionSet containing the summed counts data (counts), the feature data which will map to the summed counts data (fDat), and optionally, the experimental data (cDat)
+#' @export
+sumDuplicates <- function(counts, fDat, cDat=NULL) {
+
+    ## apply basic QC
+    if (!is.numeric(as.matrix(counts))) 
+        stop("`counts` must be numeric")
+    if(!is.null(cDat)) {
+        if (ncol(counts) != nrow(cDat)) 
+            stop("`cDat` must contain as many rows as `counts` columns")
+    }
+    if (nrow(counts) != nrow(fDat)) 
+        stop("`fDat` must contain as many rows as `counts` rows")
+ 
+    ## sum read counts across identical gene symbols by sample
+    sumGenes <- function(x, indy=fInd) {
+         sums <- tapply(x, indy, sum, na.rm=TRUE)
+    }
+
+    ## extract index of gene symbols
+    fInd <- as.character(fDat$gene_symbol)
+    
+    ## sum read counts of identical gene symbols for each sample. Orders
+    ## by gene symbol
+    newDat <- apply(counts, 2, sumGenes)
+
+    ## remove duplicate gene symbols
+    newfDat <- fDat[!duplicated(fDat$gene_symbol),]
+    
+    ## order feature data by gene symbol
+    newfDat <- newfDat[order(newfDat$gene_symbol),]
+    rownames(newfDat) <- newfDat$gene_symbol
+   
+    ## check that order is correct for both data objects
+    if(sum(rownames(newDat) != newfDat$gene_symbol) != 0) {
+        stop("sumDuplicates: feature and assay data not in correct order")
+    }
+
+    ## construct ExpressionSet for return object
+    if(!is.null(cDat)) {
+        newEset <- ExpressionSet(assayData=newDat,
+                                 phenoData=AnnotatedDataFrame(cDat),
+                                 featureData=AnnotatedDataFrame(newfDat))
+    } else {
+        newEset <- ExpressionSet(assayData=newDat,
+                                 featureData=AnnotatedDataFrame(newfDat))
+    }
+   
+    return(newEset)
+    
+} ## end sumDuplicates
+
+
+
+#' Build a reference genome
+#' 
+#' Builds a reference genome at `path/Reference_Genome/`
+#' 
+#' You must specify the Utils path if it is not already defined, and have your genome in a folder titled
+#' `Reference_Genome`. This function will construct the reference genome using RSEM tools.
+#' The command line is the default shown in the documentation.
+#' `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
+#' or if doSTAR=TRUE
+#'  `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --star --star-path starPath fasta_file name`
+#' If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
+#' @param path \code{character} specifying an \emph{absolute path} path to the Reference_Genome directory.
+#' @param gtf_file \code{character} the name of the gtf file. Empty by default. If specified the function will look for the named file in the 'path' directory
+#' @param fasta_file \code{character} the name of the fasta file, must be specified and located in the 'path' directory
+#' @param isoformsFile \code{character} the name if the known isoforms file (optional). If specified it must be located in the 'path' file.
+#' @param name \code{character} the prefix of the genome output.
+#' @param doSTAR \code{logical} logical showing whether to build genome with STAR index.
+#' @param starPath \code{character}  full path to the 'star' executable.
+#' @param threads \code{integer} number of threads to use
+#' @export
+buildReference <- function(path=NULL, gtf_file=NULL, fasta_file=NULL, isoformsFile=NULL, name=NULL, doSTAR=TRUE, starPath=NULL, threads=1){
+  if(is.null(fasta_file)|is.null(name))
+    stop("You must provide a fasta_file  and a genome name")
+  if(is.null(path)&inherits(try(getConfig()[["subdirs"]][["Utils"]],silent=TRUE),"try-error")){
+    stop("Please specify where to build the reference genome")
+  }else if(is.null(path)){
+    path = file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
+  } else{
+    subdirs<-getConfig()[["subdirs"]]
+    subdirs[["Utils"]]<-path
+    assignConfig("subdirs",subdirs) #save the user-provided path
+    path = file.path(path,"Reference_Genome")
+  }
+  if(substr(path, 1, 1) != '/') stop("'path' must be an absolute path")
+
+  ## check that gtf file is provided with known isoforms file
+  if(is.null(gtf_file) & !is.null(isoformsFile)) {
+     stop("Must provide a .gtf file if knownIsoforms file is provided")
+  }
+
+  ## set up gtf and known isoforms arguments if they exist
+  gtfopt <- ""
+  isoformsOpt <- ""
+
+  if(!is.null(gtf_file)) {
+      gtfopt <- "--gtf"
+  }
+
+  if(!is.null(isoformsFile)) {
+      isoformsOpt<-"--transcript-to-gene-map"
+  }
+
+  if(length(fasta_file)>1){
+      fasta_file <- paste(fasta_file,collapse=",")
+  }
+
+  ## build genome with STAR
+  if(doSTAR) {
+
+      ## get path to STAR if not provided
+      if(is.null(starPath)) {
+          starPath <- dirname(Sys.which("STAR"))
+      }
+      
+      ## check if the reference genome has already been built
+      if(length(list.files(pattern="SAindex", path=file.path(getConfig()[["subdirs"]]["Utils"],"Reference_Genome")))==0){
+          command = paste("cd ",path," && rsem-prepare-reference ", gtfopt , gtf_file, isoformsOpt, isoformsFile, "--p", threads, "--star --star-path", starPath, fasta_file, name)
+          print(command)
+          system(command)
+      }else{
+          message("Reference Genome Found")
+      }
+
+  ## bulid genome with RSEM
+  } else { 
+      
+      if(length(list.files(pattern=paste0(name,".chrlist"),path=file.path(getConfig()[["subdirs"]]["Utils"],"Reference_Genome")))==0){
+          command = paste0("cd ",path," && rsem-prepare-reference ",gtfopt," ",gtf_file," ",isoformsOpt, " ",isoformsFile, " --bowtie2 ",fasta_file," ",name," ")
+          system(command)
+      }else{
+          message("Reference Genome Found")
+      }
+  } ## end if doSTAR
+      
+  #set the reference genome name
+  assignConfig("reference_genome_name",name)
+
+} ## end BuildReference
+
+
+
+#' Annotate features: map UCSC gene cluster id to gene symbols
+#'
+#' Annotate features by mapping UCSC gene cluster ids to gene symbols.
+#' 
+#' @param genome /code{character} specify the genome and version of annotation
+#' @param force /code{logical} if TRUE force the annoation even if the feature file already exists
+#' @export
+annotateUCSC <- function(genome="hg38", force=TRUE) {
+
+    ## read in UCSC annotation file mapping cluster id to gene symbol
+    if(genome == "hg38") {
+        ##genFile <- paste0("ucsc", genome, "Table.txt")
+        ##genFile <- sysdata.rda
+        ##fpath <- system.file
+        ##fpath <- system.file("extdata", genFile, package="RNASeqPipelineR")
+        ##annoFile <- read.table("/shared/silo_researcher/Gottardo_R/cmurie_working/docs/ucsc38Table.txt", sep="\t", stringsAsFactors=FALSE, header=TRUE, row.names=NULL)
+        ##annoFile <- read.table(fpath, sep="\t", stringsAsFactors=FALSE, header=TRUE, row.names=NULL)
+        annoFile <- ucschg38Table 
+    } else {
+        stop(cat("Genome", genome, "is not supported."))
+    }
+    
+   featuredata_outfile <- "rsem_fdata.csv"
+    if (!force & file.exists(file.path(getConfig()[["subdirs"]][["RSEM"]], 
+        featuredata_outfile))) {
+        message("Annotation already done, skipping. Use force=TRUE to rerun.")
+        invisible(return(0))
+    }
+    
+    message("Annotating transcripts.")
+
+    ## get experimental annotation file which maps cluster ids to count rows
+    rsem_txs_table <- fread(file.path(getConfig()[["subdirs"]][["RSEM"]], 
+        "rsem_txs_table.csv"))
+
+    colnames(annoFile)[4] <- "gene_id"
+
+    ## map UCSC cluster ids from rsem to gene symbols in anno file
+    joiny <- plyr::join(rsem_txs_table, annoFile, by="gene_id", type="left",
+                        match="first")
+    
+    ## remove irrelevant columns
+    joiny$V1 <- joiny$hg38.knownGene.name <- joiny$hg38.knownGene.alignID <- NULL
+
+    ## make human friendly column labels
+    colnames(joiny) <- c("gene_clusterID", "transcript_ids","gene_symbol")
+    
+    message("Writing feature data to rsem_fdata.csv")
+    write.csv(joiny, file = file.path(getConfig()[["subdirs"]][["RSEM"]], featuredata_outfile), row.names = FALSE)
+    
+} ## end annotateUCSC
+
+
+#' Map the annotation file to the count and tpm data
+#'
+#' Match the count, tpm, and feature data to the annotation file. Remove
+#' samples in count and tpm that are not found in the annotation file and
+#' ensure that the count and tpm columns match the rows of the annoation
+#' file. Also attach the results of the quality_control table to the
+#' annotation file.
+#'
+#' @param annotationMatch \code{character} Column name of annotation file
+#' that maps to the column names of the count and tpm data sets (fastq
+#' file names with the suffixes removed including paired end identifiers
+#' if they exist). Default column name used is 'Sample'.
+#' @return \code{list} list containing the count, tpm, feature, and
+#' annotation data. list names are counts, tpms, featureData, annoData.
+#'
+#' The annotation file, which contains the experimental design information,
+#' must be constructed by the user and placed in the RAW_ANNOTATIONS
+#' directory. It must be a .csv file and be the only .csv file in the
+#' RAW_ANNOTATION directory. By default 'mergeData' will look for a column
+#' called 'Sample' that maps each row of the annotation file to the columns
+#' of the counts and tpm columns.
+#' The quality control matrix is generated by running 'runFASTQ' and then
+#' 'QualityControl'
+#' @export
+mergeData <- function(annotationMatch=NULL) {
+
+    ## read feature, counts, and tpm data files
+    fd <- fread(getConfigFile("RSEM", "rsem_fdata.csv"))
+    count <-  as.data.frame(fread(getConfigFile("RSEM", "rsem_count_matrix.csv")))[fd$gene_clusterID, ]
+    tpm <-  as.data.frame(fread(getConfigFile("RSEM", "rsem_tpm_matrix.csv")))[fd$gene_clusterID, ]
+    
+    ## double check everyting is ordered correctly
+    if(sum(fd$gene_clusterID != count[,1]) != 0 | sum(fd$gene_clusterID != tpm[,1]) != 0) {
+        stop("count or tpm matrices are not ordered the same as feature data matrix")
+    }
+
+    ## remove gene_id columns
+    count <- count[,-1]
+    tpm <- tpm[,-1]
+
+    fd <- data.frame(fd)
+    rownames(fd) <- rownames(count) <- rownames(tpm) <- fd$gene_ClusterID
+ 
+    anno <- fread(list.files(getConfigDir("RAWANNOTATIONS"), pattern="*.csv$", full.names=TRUE))
+    qc <- fread(getConfigFile("OUTPUT", "quality_control_matrix.csv"))
+
+    ## rename column that maps to fastq file prefixes
+    if(!is.null(annotationMatch)) {
+         setnames(anno, annotationMatch, "Sample")
+    }
+ 
+    ## remove samples with descrepancies between fastq and anno
+    inter <- intersect(anno$Sample, qc$Sample)
+    anno <- anno[Sample %in% inter,]
+    qc <- qc[Sample %in% inter,]
+    count <- count[,colnames(count) %in% inter]
+    tpm <- tpm[,colnames(tpm) %in% inter]
+    samples <- colnames(count)
+
+    ## merge
+    anno <- merge(anno, qc, by="Sample")
+    anno <- anno[match(samples, Sample)]
+    cd <- data.frame(wellKey=samples, anno)
+    rownames(cd) <- cd$wellKey
+    
+    ## match sample order with annotation file
+    count <- count[,cd$wellKey]
+    tpm <- tpm[,cd$wellKey]
+    if(sum(colnames(count) == cd$wellKey) != dim(count)[[2]]) {stop("ERROR: colnames don't match")}
+    if(sum(colnames(tpm) == cd$wellKey) != dim(tpm)[[2]]) {stop("ERROR: colnames don't match")}
+
+    ## return the updated data
+    return(list(counts=count, tpms=tpm, featureData=fd, annoData=cd))
+
+} ## end mergeData
