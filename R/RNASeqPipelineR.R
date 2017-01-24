@@ -1700,7 +1700,8 @@ buildReference <- function(path=NULL, gtf_file=NULL, fasta_file=NULL, isoformsFi
 #' Annotate features by mapping UCSC gene cluster ids to gene symbols.
 #' 
 #' @param genome /code{character} specify the genome and version of annotation
-#' @param force /code{logical} if TRUE force the annoation even if the feature file already exists
+#' @param force /code{logical} if TRUE force the annoation even if the feature file already
+#' exists
 #' @export
 annotateUCSC <- function(genome="hg38", force=TRUE) {
 
