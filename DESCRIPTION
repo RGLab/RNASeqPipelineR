@@ -9,7 +9,7 @@ Description: Simplifies and standardizes the pipelining of RNASeq files into
     processed count matrices.
 VignetteBuilder: knitr
 License: GPL(>=3.0) | file LICENSE
-LazyLoad: yes
+LazyData: TRUE
 Imports:
     GEOquery,
     RSQLite,
