@@ -14,6 +14,9 @@
 #' @import GEOquery
 #' @import SRAdb
 #' @import stringr
+#' @import utils
+#' @import stats
+#' @import Biobase
 NULL
 
 ## silence complaints about variables not found in calls that use non-standard evaluation
@@ -107,23 +110,28 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
 
 #' Load an RNASeqPipelineR project
 #' 
-#' Load and RNASeqPipelineR project
+#' Load an RNASeqPipelineR project
 #' 
 #' Load an RNASeqPipelineR project from disk.
+#' 
 #' @param project_dir \code{character} the path to the project
 #' @param name \code{character} the name of the project
 #' @export
 loadProject <- function(project_dir=NULL,name=NULL){
-  if(dir.exists(normalizePath(file.path(project_dir,name)))){
-    #load the configuration and return
-    message("Loading configuration for ",name, " from ", project_dir);
-    success<-readConfig(normalizePath(file.path(project_dir,name)))      
-  }
-  if(success){
-    invisible()
-  }else{
-    stop("Can't load project.")
-  }
+    success <- FALSE
+    pathy <- normalizePath(file.path(project_dir,name), mustWork=FALSE)
+    if(dir.exists(pathy)){
+        ## load the configuration and return
+        message("Loading configuration for ",name, " from ", project_dir);
+        success <- readConfig(pathy)      
+    } else {
+         stop(paste("ERROR:", pathy, "does not exist."))
+    } ## end if else
+    if(success) {
+        invisible()
+    }else {
+        stop("Can't load project.")
+    }
 }
 
 #global config in package namespace
@@ -141,7 +149,7 @@ rnaseqpipeliner_configuration <- list()
 #' @param fromDisk \code{logical} specifying whether to load the configuration of an existing proejct, in which case the path to the proejct is given by \code{subdirectories} argument
 configure_project <- function(subdirectories=NULL,fromDisk=FALSE){
   ns <- getNamespace("RNASeqPipelineR")
-  obj<-getConfig()
+  obj<-getConfig(create=TRUE)
   if(!fromDisk){
     obj$subdirs <- normalizePath(subdirectories)
     names(obj$subdirs)<-names(subdirectories)
@@ -160,13 +168,15 @@ configure_project <- function(subdirectories=NULL,fromDisk=FALSE){
 #' 
 #' Retrieve the configuration for the project from the namespace. If
 #' configuration not found exit with error.
-#' 
+#'
+#' @param create /code{logical} If TRUE then this will return empty list that can be used
+#' to create new configuration. If FALSE then standard error checking will be run.
 #' @return Returns configuration structure or stops with error if not found
 #' @export
-getConfig<-function(){
+getConfig<-function(create=FALSE){
   ns <- getNamespace("RNASeqPipelineR")
   config <- get("rnaseqpipeliner_configuration", ns)
-  if(length(config) == 0) {
+  if(!create & length(config) == 0) {
        stop("Configuration not found: Have you run loadProject or buildReference (for Utils directory)?")
   }
   return(config)
@@ -180,6 +190,7 @@ getConfig<-function(){
 #'
 #' @param dir \code{character} directory that path is required for
 #' @return \code{character} full path to directory
+#' @export
 getConfigDir <- function(dir) {
 
     path <- getConfig()[["subdirs"]]
@@ -201,6 +212,7 @@ getConfigDir <- function(dir) {
 #' @param dir \code{character} directory containing file
 #' @param file \code{character} file sought after
 #' @return \code{character} full path to directory
+#' @export
 getConfigFile <- function(dir, file) {
 
     ## construct path
@@ -726,23 +738,23 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
   }
   rsem_dir <- getConfig()[["subdirs"]][["RSEM"]]
   ## parse RSEM output to get names of fastq files which have already been annotated.
-  done <- str_replace(list.files(path=rsem_dir,pattern="\\.genes\\.results$"), 'Aligned\\.toTranscriptome\\.out\\.genes\\.results$', '')
+  done <- stringr::str_replace(list.files(path=rsem_dir,pattern="\\.genes\\.results$"), 'Aligned\\.toTranscriptome\\.out\\.genes\\.results$', '')
 
   #browser()
   if(!fromBAM){
     fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
-    todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), '(_[12])?\\.fastq$', ''))
+    todo <- unique(stringr::str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), '(_[12])?\\.fastq$', ''))
     extension <- if(paired) c('_1.fastq', '_2.fastq') else '.fastq'
   } else if(!fromSTAR){
     fastq_dir <- getConfig()[["subdirs"]][["BAM"]]
     orig <- list.files(path=fastq_dir,pattern="\\.bam$")
-    todo <- str_replace(orig, '(\\.transcript)?\\.bam$', '')
-    extension <- str_match(orig[1], '(\\.transcript)?\\.bam$')[1,1]
+    todo <- stringr::str_replace(orig, '(\\.transcript)?\\.bam$', '')
+    extension <- stringr::str_match(orig[1], '(\\.transcript)?\\.bam$')[1,1]
   }else{
     fastq_dir <- getConfig()[["subdirs"]][["BAM"]]
     orig <- list.files(path=fastq_dir,pattern="Aligned.toTranscriptome.out.bam$")
-    todo <- str_replace(orig, 'Aligned.toTranscriptome.out.bam$', '')
-    extension <- str_match(orig[1], 'Aligned.toTranscriptome.out.bam$')[1,1]
+    todo <- stringr::str_replace(orig, 'Aligned.toTranscriptome.out.bam$', '')
+    extension <- stringr::str_match(orig[1], 'Aligned.toTranscriptome.out.bam$')[1,1]
   }
   keep <- setdiff(todo, done)
   if(length(keep)==0){
@@ -832,7 +844,7 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
 #'@export 
 RSEMAssembleExpressionMatrix <- function(force=FALSE){
   cond_eval <- length(list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="rsem_"))<4
-  if(cond_eval|force){
+  if(cond_eval | force){
     message("Assembling counts matrix")
     rsem_files <- list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="genes.results", full.names = TRUE)
     # Read all files and create a list of data.tables
@@ -884,7 +896,7 @@ RSEMSummarizeMapping <- function(dir, log=TRUE, plot=TRUE){
         y <- fread(x, skip=3)
         setnames(y, c('nmap', 'reads'))
         y[,curead:=cumsum(reads)]
-        file <- str_replace(basename(x), fixed('.cnt'), '')
+        file <- stringr::str_replace(basename(x), fixed('.cnt'), '')
         total <- y[nmap==Inf,curead]
         mapped <- total-y[nmap==0,reads]
         unique <- max(y[nmap==1,reads], 0)
@@ -1488,12 +1500,12 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paire
     split(as.data.frame(df),gl(1,groupsize,length=nrow(df)))
   }
   star_dir <- getConfig()[["subdirs"]][["BAM"]]
-  done <- str_replace(list.files(path = star_dir, pattern = "\\Aligned.toTranscriptome.out.bam$"), "Aligned.toTranscriptome.out.bam", "")
+  done <- stringr::str_replace(list.files(path = star_dir, pattern = "\\Aligned.toTranscriptome.out.bam$"), "Aligned.toTranscriptome.out.bam", "")
   fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
   if(paired){
-    todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), paired_pattern, ''))
+    todo <- unique(stringr::str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), paired_pattern, ''))
   }else{
-    todo <- unique(str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), "\\.fastq$", ''))
+    todo <- unique(stringr::str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), "\\.fastq$", ''))
   }
   extension <- if(paired) paired_pattern else '.fastq'
   keep <- setdiff(todo, done)
@@ -1694,13 +1706,11 @@ annotateUCSC <- function(genome="hg38", force=TRUE) {
 
     ## read in UCSC annotation file mapping cluster id to gene symbol
     if(genome == "hg38") {
-        ##genFile <- paste0("ucsc", genome, "Table.txt")
-        ##genFile <- sysdata.rda
-        ##fpath <- system.file
-        ##fpath <- system.file("extdata", genFile, package="RNASeqPipelineR")
-        ##annoFile <- read.table("/shared/silo_researcher/Gottardo_R/cmurie_working/docs/ucsc38Table.txt", sep="\t", stringsAsFactors=FALSE, header=TRUE, row.names=NULL)
-        ##annoFile <- read.table(fpath, sep="\t", stringsAsFactors=FALSE, header=TRUE, row.names=NULL)
-        annoFile <- ucschg38Table 
+        ##fpath1 <- system.file("/R/sysdata.rdx", package="RNASeqPipelineR")
+        ##load(fpath1)
+        ##fpath2 <- system.file("/R/sysdata.rdb", package="RNASeqPipelineR")
+        ##load(fpath2)
+        annoFile <- ucschg38Table
     } else {
         stop(cat("Genome", genome, "is not supported."))
     }

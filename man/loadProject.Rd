@@ -12,7 +12,7 @@ loadProject(project_dir = NULL, name = NULL)
 \item{name}{\code{character} the name of the project}
 }
 \description{
-Load and RNASeqPipelineR project
+Load an RNASeqPipelineR project
 }
 \details{
 Load an RNASeqPipelineR project from disk.

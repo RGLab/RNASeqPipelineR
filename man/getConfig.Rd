@@ -4,7 +4,11 @@
 \alias{getConfig}
 \title{Get the configuration for the project from the namespace}
 \usage{
-getConfig()
+getConfig(create = FALSE)
+}
+\arguments{
+\item{create}{/code{logical} If TRUE then this will return empty list that can be used
+to create new configuration. If FALSE then standard error checking will be run.}
 }
 \value{
 Returns configuration structure or stops with error if not found

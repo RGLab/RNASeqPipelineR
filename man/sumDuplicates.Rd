@@ -7,7 +7,8 @@
 sumDuplicates(counts, fDat, cDat = NULL)
 }
 \arguments{
-\item{counts}{\code{matrix} table of read counts. Rows are genes and columns are samples}
+\item{counts}{\code{matrix} table of read counts or tpms. Rows are genes and columns are
+samples}
 
 \item{fDat}{\code{data.frame} feature data - rows map to counts rows}
 
