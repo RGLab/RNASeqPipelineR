@@ -544,7 +544,7 @@ runFastQC <- function(ncores=8){
   notrun <- FQfile[!FQfile$done,]
   run_command <-  paste0('parallel -j ', ncores,
                          ' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],
-                         '" -q ::: "', paste(notrun$file, collapse='" "'), '"')                             
+                         '" -q ::: "', paste(notrun$file, collapse='" "'), '"')
   if(nrow(notrun) > 0){
       message('Running fastqc process on ', nrow(notrun), ' files.')
     out<-system(run_command)
@@ -1488,8 +1488,10 @@ buildGenomeIndexSTAR = function (path = NULL, gtf_file = "", fasta_file = NULL, 
 #' @param star_threads \code{integer} specify how many threads star should use.
 #' @param paired \code{logical} specify whether you have paried reads or not.
 #' @param paired_pattern \code{character} specify the suffix of the paried-end fastq file names.
+#' @param fastqPath \code{character} specify path to FASTQ files if different than default
 #' @export
-AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paired_pattern=c("_1.fastq", "_2.fastq")){
+AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE,
+                          paired_pattern=c("_1.fastq", "_2.fastq"), fastqPath=""){
   
   ncores<-parallel_threads*star_threads
   if(ncores>parallel::detectCores()){
@@ -1501,7 +1503,19 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE, paire
   }
   star_dir <- getConfig()[["subdirs"]][["BAM"]]
   done <- stringr::str_replace(list.files(path = star_dir, pattern = "\\Aligned.toTranscriptome.out.bam$"), "Aligned.toTranscriptome.out.bam", "")
-  fastq_dir <- getConfig()[["subdirs"]][["FASTQ"]]
+
+  ## read fastq files from user inputted directory or use default
+  fastq_dir <- ifelse(fastqPath=="",  getConfig()[["subdirs"]][["FASTQ"]], fastqPath)
+  if(!file.exists(fastq_dir)) {
+      stop(paste(fastq_dir, "doesn't exist\n"))
+  }
+
+  ## check that there are fastq files in directory
+  fileys <- list.files(path=fastq_dir,pattern="\\.fastq$")
+  if(length(fileys) == 0) {
+       stop(paste("No fastq files found in", fastq_dir))
+  }
+
   if(paired){
     todo <- unique(stringr::str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), paired_pattern, ''))
   }else{
@@ -1801,8 +1815,8 @@ mergeData <- function(annotationMatch=NULL, mergeAnnotation=TRUE) {
     rownames(fd) <- rownames(count) <- rownames(tpm) <- fd$gene_ClusterID
 
     ## add expiremental design information to return object
-    anno <- fread(list.files(getConfigDir("RAWANNOTATIONS"), pattern="*.csv$", full.names=TRUE), data.table=FALSE)
-    cd <- anno
+    anno <- fread(list.files(getConfigDir("RAWANNOTATIONS"), pattern="*.csv$", full.names=TRUE), data.table=TRUE)
+    cd <- data.frame(anno)
     
     if(mergeAnnotation) {
          qc <- fread(getConfigFile("OUTPUT", "quality_control_matrix.csv"))
