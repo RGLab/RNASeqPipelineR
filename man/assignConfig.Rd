@@ -17,4 +17,3 @@ Assign value to name in `rnaseqpipeliner_configuration` object
 \details{
 Convenience function to assign a new or reassign an element named \code{name} to the \code{rnaseqpipeliner_configuration} object with the value \code{value}
 }
-

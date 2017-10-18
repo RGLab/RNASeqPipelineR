@@ -15,4 +15,3 @@ Put all the counts from the individual libraries into a single matrix result
 \details{
 Assemble an expression matrix from the individual libraries.
 }
-

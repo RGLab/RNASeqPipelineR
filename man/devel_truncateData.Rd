@@ -15,4 +15,3 @@ This will truncate the GSM_table to `n` files for testing purposes.
 \details{
 Since there is over 100Gb of data, we truncate to n (default 2) files for testing.
 }
-

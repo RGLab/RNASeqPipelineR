@@ -18,4 +18,3 @@ Sets the location of aspera client based on expected defaults. Or pass the insta
 \note{
 Needs to be tested on linux and modified to locate the identity keys for aspera on linux
 }
-

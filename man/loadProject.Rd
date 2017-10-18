@@ -17,4 +17,3 @@ Load an RNASeqPipelineR project
 \details{
 Load an RNASeqPipelineR project from disk.
 }
-

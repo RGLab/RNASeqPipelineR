@@ -9,4 +9,3 @@ annotateSRA()
 \description{
 Set the pData to reflect the downloaded SRA files
 }
-

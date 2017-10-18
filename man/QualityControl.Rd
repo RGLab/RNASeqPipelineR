@@ -13,4 +13,3 @@ QualityControl(paired = FALSE)
 calculate qc statistics: nGenesOn, librarySize, alignment percentage to reference genome, exon mapping rate,
 and per base sequence quality output by FASTQC software
 }
-

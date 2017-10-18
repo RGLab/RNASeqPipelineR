@@ -16,4 +16,3 @@ If the database files is not available, it is downloaded.
 Downloads and stores the SRAdb sqlite database if necessary and stores it in 
 the Utils folder.
 }
-

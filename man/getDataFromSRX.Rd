@@ -13,4 +13,3 @@ getDataFromSRX(x = NULL)
 Download SRA files from SRX accessions. Downloads asynchronously. Won't message you when complete, so can't be run in 
 batch mode at the moment.
 }
-

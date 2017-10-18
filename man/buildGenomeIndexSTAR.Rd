@@ -28,4 +28,3 @@ The command line is the default shown in the documentation.
 A fasta_file must be provided.
 gtf_file is highly recommended, and if not provided, STAR will run without annotations.
 }
-

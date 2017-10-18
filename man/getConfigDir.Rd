@@ -16,4 +16,3 @@ getConfigDir(dir)
 Retrieve full path to 'dir' in project configuration structure. If 'dir'
 not found exit with error.
 }
-

@@ -32,4 +32,3 @@ The command line is the default shown in the documentation.
 `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --bowtie2 fasta_file name`
 If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
 }
-

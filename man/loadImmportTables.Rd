@@ -18,4 +18,3 @@ Loads the GEO accession numbers from Immport tables
 Load data from Immport tables in the \code{Tab} directory.
 Stores the tables in the configuration in the namespace.
 }
-

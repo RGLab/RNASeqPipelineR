@@ -12,4 +12,3 @@ annotationsFromSRX(x)
 \description{
 Gets annotations for SRR files based on SRAmetadb contents
 }
-

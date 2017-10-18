@@ -15,4 +15,3 @@ Run the pear tool to assemble paired end fastq files into a single output fastq 
 \details{
 Use this as a preliminary preprocessing step to running MiTCR if you have paired-end data.
 }
-

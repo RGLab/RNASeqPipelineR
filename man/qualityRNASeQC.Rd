@@ -24,4 +24,3 @@ Pre-run Checklist
 3. Is you reference Indexed? We index the refrence genome before runing the tophat
 4. Dose the reference genome have a dict file? we generated the dict file in the createGenomeDict
 }
-

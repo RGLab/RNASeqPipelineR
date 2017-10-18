@@ -15,4 +15,3 @@ Construct and return an expression set of counts or TPM values
 \details{
 Constructs an expression set of counts or tpm values depending on the value of which parameter.
 }
-

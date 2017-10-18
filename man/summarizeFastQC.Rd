@@ -16,4 +16,3 @@ Summarize the fastqc results
 Function to be run after `runFastQC` that will summarize the fastQC results
 and generate a plot.
 }
-

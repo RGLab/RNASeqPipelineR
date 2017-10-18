@@ -12,4 +12,3 @@ data.table of source data, invisbly
 \description{
 Prints plots of the duplication distribution and % duplication across libraries
 }
-

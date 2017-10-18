@@ -4,14 +4,20 @@
 \alias{annotateUCSC}
 \title{Annotate features: map UCSC gene cluster id to gene symbols}
 \usage{
-annotateUCSC(genome = "hg38", force = TRUE)
+annotateUCSC(genome = "hg38", annotateTable = NULL, force = TRUE)
 }
 \arguments{
-\item{genome}{/code{character} specify the genome and version of annotation}
+\item{genome}{\code{character} specify the genome and version of
+annotation}
 
-\item{force}{/code{logical} if TRUE force the annoation even if the feature file already exists}
+\item{annotateTable}{\code{data.frame} Each row is a transcript and the
+columns are: transcript ID, Ensemble gene ID, gene symbol, UCSC
+clusterId. The clusterId column must have 'clusterId' in column name and
+not be present in any other column.}
+
+\item{force}{\code{logical} if TRUE force the annoation even if the
+feature file already exists}
 }
 \description{
 Annotate features by mapping UCSC gene cluster ids to gene symbols.
 }
-

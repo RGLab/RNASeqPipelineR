@@ -18,4 +18,3 @@ getConfigFile(dir, file)
 Retrieve full path to 'dir/file' in project configuration structure. If
 file not found exit with error.
 }
-

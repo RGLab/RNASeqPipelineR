@@ -15,4 +15,3 @@ Read the configuration for a project
 \details{
 Read the configuration from a project, stored in the CONFIG directory
 }
-

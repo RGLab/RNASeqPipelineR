@@ -17,4 +17,3 @@ Returns configuration structure or stops with error if not found
 Retrieve the configuration for the project from the namespace. If
 configuration not found exit with error.
 }
-

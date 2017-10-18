@@ -41,7 +41,7 @@ mData <- mergeData()
 count_eset <- sumDuplicates(mData$counts, mData$featureData, mData$annoData)
 tpm_eset <- sumDuplicates(mData$tpms, mData$featureData, mData$annoData)
 
-save(count_eset, tpm_eset, file=paste0(PREFIX, "/test/OUTPUT/test.RData"))
+save(count_eset, tpm_eset, file=paste0(tmp, "/test/OUTPUT/test.RData"))
 
 
 ## remove temp directory and all contents (just to be safe)

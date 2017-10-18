@@ -12,4 +12,3 @@ Save the configuration for a project
 \details{
 Save the configuration from a project, stored in the CONFIG directory
 }
-

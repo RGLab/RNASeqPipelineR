@@ -5,7 +5,7 @@
 \title{Use the STAR tool to align the reads}
 \usage{
 AlignmentSTAR(parallel_threads = 1, star_threads = 6, paired = TRUE,
-  paired_pattern = c("_1.fastq", "_2.fastq"))
+  paired_pattern = c("_1.fastq", "_2.fastq"), fastqPath = "")
 }
 \arguments{
 \item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}
@@ -15,6 +15,8 @@ AlignmentSTAR(parallel_threads = 1, star_threads = 6, paired = TRUE,
 \item{paired}{\code{logical} specify whether you have paried reads or not.}
 
 \item{paired_pattern}{\code{character} specify the suffix of the paried-end fastq file names.}
+
+\item{fastqPath}{\code{character} specify path to FASTQ files if different than default}
 }
 \description{
 Use the STAR tool to align reads and generate transcriptome bam files
@@ -26,4 +28,3 @@ matching of paired fastq files based on that assumption using string edit distan
 and read 2 is assumed to be downstream.
 The number of parallel_threads*star_threads should not be more than the number of cores available on your system.
 }
-

@@ -15,4 +15,3 @@ Uses CLI SRA Toolkit to convert SRA files to FastQ if they don't already exist.
 \details{
 Converts SRA files to FastQ using the SRA Toolkit. The function checks whether the FastQ files exist, and if not, performs the conversion.
 }
-

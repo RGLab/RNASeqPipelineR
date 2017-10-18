@@ -23,4 +23,3 @@ instances all read counts mapped to a single gene symbol are summed.
 The summed read counts are returned in an Expression Set along with
 the feature data table and optionally an experimental design table.
 }
-

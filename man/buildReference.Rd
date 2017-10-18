@@ -37,4 +37,3 @@ or if doSTAR=TRUE
  `rsem-prepare-reference --gtf gtf_file --transcript-to-gene-map knownIsoforms.txt --star --star-path starPath fasta_file name`
 If the gtf_file is not give, then the transcript-to-gene-map option is not used either. A fasta_file and a name must be provided.
 }
-

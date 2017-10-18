@@ -37,4 +37,3 @@ createProject("myproject",path=".",verbose=TRUE)
 createProject("myproject",path=".",load_from_immport=TRUE) #won't work unless immport is set up
 }
 }
-

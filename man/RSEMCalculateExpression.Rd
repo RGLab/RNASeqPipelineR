@@ -49,4 +49,3 @@ The number of parallel_threads*bowtie_threads should not be more than the number
 \note{
 The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 }
-

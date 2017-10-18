@@ -18,4 +18,3 @@ Combine several fastq.gz files into one fastq.gz file for each library
 Decompress the fastq.gz 
 Copy the fastQ files into FASTQ folder
 }
-

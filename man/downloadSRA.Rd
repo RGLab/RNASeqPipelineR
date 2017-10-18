@@ -16,4 +16,3 @@ Based on the SRA db, download the FastQ files, unless they already exist.
 Conditionally download the FastQ files in the SRA db based on Immport tables.
 If the files are already present, they will not be downloaded.
 }
-

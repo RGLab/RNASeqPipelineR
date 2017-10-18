@@ -1713,11 +1713,14 @@ buildReference <- function(path=NULL, gtf_file=NULL, fasta_file=NULL, isoformsFi
 #'
 #' Annotate features by mapping UCSC gene cluster ids to gene symbols.
 #' 
-#' @param genome /code{character} specify the genome and version of annotation
-#' @param annotateTable /code{data.frame} Each row is a transcript and the
-#' columns are: transcript ID, Ensemble gene ID, gene symbol, UCSC clusterID
-#' @param force /code{logical} if TRUE force the annoation even if the feature file already
-#' exists
+#' @param genome \code{character} specify the genome and version of
+#' annotation
+#' @param annotateTable \code{data.frame} Each row is a transcript and the
+#' columns are: transcript ID, Ensemble gene ID, gene symbol, UCSC
+#' clusterId. The clusterId column must have 'clusterId' in column name and
+#' not be present in any other column.
+#' @param force \code{logical} if TRUE force the annoation even if the
+#' feature file already exists
 #' @export
 annotateUCSC <- function(genome="hg38", annotateTable=NULL, force=TRUE) {
 
@@ -1727,7 +1730,9 @@ annotateUCSC <- function(genome="hg38", annotateTable=NULL, force=TRUE) {
        ## read in UCSC annotation file mapping cluster id to gene symbol
         if(genome == "hg38") {
                  annoFile <- ucschg38Table
-        } else {
+        } else if(genome == "mm10") {
+                 annoFile <- ucscmm10Table
+         } else {
             stop(cat("Genome", genome, "is not supported."))
         }
     } else {
@@ -1747,7 +1752,8 @@ annotateUCSC <- function(genome="hg38", annotateTable=NULL, force=TRUE) {
     rsem_txs_table <- fread(file.path(getConfig()[["subdirs"]][["RSEM"]], 
         "rsem_txs_table.csv"))
 
-    colnames(annoFile)[4] <- "gene_id"
+    ## rename clusterID column to match clusterId column in rsem_txs_table
+    colnames(annoFile)[grep("clusterId", colnames(annoFile))] <- "gene_id"
 
     ## map UCSC cluster ids from rsem to gene symbols in anno file
     joiny <- plyr::join(rsem_txs_table, annoFile, by="gene_id", type="left",

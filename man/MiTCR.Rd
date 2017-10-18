@@ -28,4 +28,3 @@ Run the MiTCR tool on each fastQ file
 \details{
 Runs MiTCR on each fastQ file.
 }
-

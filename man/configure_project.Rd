@@ -19,4 +19,3 @@ Stores the project configuration in the rnaseqpipeliner_configuration
 variable in the packge namespace.
 Generally, this function shouldn't be called by the user.
 }
-

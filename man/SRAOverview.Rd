@@ -13,4 +13,3 @@ Prints an overview of the SRA files
 Generates a table of the downloaded files for an overview to be included
 in reports.
 }
-

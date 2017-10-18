@@ -19,4 +19,3 @@ returns a data table of # reads per library, invisibly
 \description{
 Summarize the number of mapped, unmapped and ambiguous reads from RSEM output
 }
-

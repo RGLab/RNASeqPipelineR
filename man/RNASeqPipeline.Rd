@@ -16,4 +16,3 @@ manner.
 \author{
 Raphael Gottardo and Greg Finak
 }
-
