@@ -1760,8 +1760,10 @@ annotateUCSC <- function(genome="hg38", annotateTable=NULL, force=TRUE) {
                         match="first")
     
     ## remove irrelevant columns
-    joiny$V1 <- joiny$hg38.knownGene.name <- joiny$hg38.knownGene.alignID <- NULL
-
+    removeCols <- grep("knownGene", colnames(joiny))
+    joiny[, removeCols] <- NULL
+    joiny$V1 <- NULL
+  
     ## make human friendly column labels
     colnames(joiny) <- c("gene_clusterID", "transcript_ids","gene_symbol")
     
