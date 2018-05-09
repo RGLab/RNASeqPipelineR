@@ -8,7 +8,7 @@
 #' @param fasta_file name of fasta file to be used
 #' @param name name of index to be built
 #' @param force if TRUE build index if it already exists else don't.
-#' 
+#' @export
 kallistoBuildTranscriptIndex <- function(path=NULL,
                                          fasta_file="Homo_sapiens.GRCh38.cdna.all.fa",
                                          name="GRCH38_R91.idx",
