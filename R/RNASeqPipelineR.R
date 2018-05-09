@@ -17,6 +17,7 @@
 #' @import utils
 #' @import stats
 #' @import Biobase
+#' @import biomaRt
 NULL
 
 ## silence complaints about variables not found in calls that use non-standard evaluation
@@ -69,7 +70,8 @@ dir.exists<-function (x)
 #' \dontrun{
 #' createProject("myproject",path=".",load_from_immport=TRUE) #won't work unless immport is set up
 #' }
-createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport=FALSE){
+createProject <- function(project_name, path=".", verbose=FALSE, 
+                          load_from_immport=FALSE){
   project_dir <- file.path(path,project_name)
   success<-FALSE
   oldwarn<-options("warn")$warn
@@ -84,9 +86,15 @@ createProject <- function(project_name,path=".",verbose=FALSE, load_from_immport
   if(success)
     invisible()
   cmnd_prefix <- "mkdir -p "
-  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",CONFIG="CONFIG",OUTPUT="OUTPUT",RAWANNOTATIONS="RAW_ANNOTATIONS",RNASEQC="RNASEQC",TOPHAT="TOPHAT", BAM='BAM')
+  dirs <- c(SRA="SRA",FASTQ="FASTQ",RSEM="RSEM",FASTQC="FASTQC",GEO="GEO",
+            CONFIG="CONFIG",OUTPUT="OUTPUT",RAWANNOTATIONS="RAW_ANNOTATIONS",
+            RNASEQC="RNASEQC",TOPHAT="TOPHAT", BAM='BAM', KALLISTO="KALLISTO")
   if(load_from_immport)
     dirs<-c(dirs,Tab="Tab")
+  
+  ## add Kallisto log and error directories
+  dirs <- c(dirs, "KALLISTO/log", "KALLISTO/error")
+  
   subdirs <- file.path(project_dir,dirs)
   names(subdirs)<-names(dirs)
   build_skeleton_commands<-paste0(cmnd_prefix,c(project_dir,subdirs))
@@ -132,6 +140,18 @@ loadProject <- function(project_dir=NULL,name=NULL){
     }else {
         stop("Can't load project.")
     }
+}
+
+
+#' Set path to reference genome index
+#' @param utils \code{character} the path to the directory containing reference genome.
+#' @param refName \code{character)} name of reference index or genome
+#' @export
+setGenomeReference <- function(utils, refName) {
+  subdirs <- getConfig()[["subdirs"]]
+  subdirs[["Utils"]] <- utils
+  assignConfig("subdirs", subdirs)
+  assignConfig("reference_genome_name", refName)
 }
 
 #global config in package namespace
@@ -649,7 +669,7 @@ summarizeDuplication <- function(){
 #' @param fasta_file \code{character} the name of the fasta file, must be specified
 #' @param star_threads \code{integer} number of threads to use when building index
 #' @param name \code{character} the name of the genome output.
-#' @param gff3 \code{boolean} when gtf_file is gff3 format set it to TRUE to add "--sjdbGTFtagExonParentTranscript gene".
+#' @param gff3 \code{logical} when gtf_file is gff3 format set it to TRUE to add "--sjdbGTFtagExonParentTranscript gene".
 #' @param additional_param \code{character} default "".  Additional parameters to pass.
 #' @export
 
@@ -1185,7 +1205,8 @@ annotationsFromSRX<-function(x){
 #' @param ram_per_node \code{numeric} The number of Mb per node. Ignored if slurm=FALSE. Default of \code{parallel_threads*bowtie_threads*1000}
 #' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
 #' @export
-sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jingyuan_working/iGenome/Mus_musculus/UCSC/mm10", parallel_threads=1,tophat_threads=6, paired=FALSE, nchunks=10,days_requested=5,
+sequenceAlignmentTopHat = function(path="/shared/silo_researcher/Gottardo_R/jingyuan_working/iGenome/Mus_musculus/UCSC/mm10", 
+                                   parallel_threads=1,tophat_threads=6, paired=FALSE, nchunks=10,days_requested=5,
                                    slurm=FALSE,slurm_partition="gottardo_r",ram_per_node=tophat_threads*parallel_threads*1200)
 {
   ncores<-parallel_threads*tophat_threads
@@ -1484,11 +1505,11 @@ buildGenomeIndexSTAR = function (path = NULL, gtf_file = "", fasta_file = NULL, 
 #' matching of paired fastq files based on that assumption using string edit distance. Read 1 is assumed to be upstream
 #' and read 2 is assumed to be downstream.
 #' The number of parallel_threads*star_threads should not be more than the number of cores available on your system.
-#' @param parallel_threads \code{integer} specify how many parallel processes to spawn
-#' @param star_threads \code{integer} specify how many threads star should use.
-#' @param paired \code{logical} specify whether you have paried reads or not.
-#' @param paired_pattern \code{character} specify the suffix of the paried-end fastq file names.
-#' @param fastqPath \code{character} specify path to FASTQ files if different than default
+#' @param parallel_threads  specify how many parallel processes to spawn
+#' @param star_threads  specify how many threads star should use.
+#' @param paired  specify whether you have paried reads or not.
+#' @param paired_pattern  specify the suffix of the paried-end fastq file names.
+#' @param fastqPath specify path to FASTQ files if different than default
 #' @export
 AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE,
                           paired_pattern=c("_1.fastq", "_2.fastq"), fastqPath=""){
@@ -1713,13 +1734,13 @@ buildReference <- function(path=NULL, gtf_file=NULL, fasta_file=NULL, isoformsFi
 #'
 #' Annotate features by mapping UCSC gene cluster ids to gene symbols.
 #' 
-#' @param genome \code{character} specify the genome and version of
+#' @param genome specify the genome and version of
 #' annotation
-#' @param annotateTable \code{data.frame} Each row is a transcript and the
+#' @param annotateTable Each row is a transcript and the
 #' columns are: transcript ID, Ensemble gene ID, gene symbol, UCSC
 #' clusterId. The clusterId column must have 'clusterId' in column name and
 #' not be present in any other column.
-#' @param force \code{logical} if TRUE force the annoation even if the
+#' @param force if TRUE force the annoation even if the
 #' feature file already exists
 #' @export
 annotateUCSC <- function(genome="hg38", annotateTable=NULL, force=TRUE) {
@@ -1781,12 +1802,12 @@ annotateUCSC <- function(genome="hg38", annotateTable=NULL, force=TRUE) {
 #' file. Also attach the results of the quality_control table to the
 #' annotation file.
 #'
-#' @param annotationMatch \code{character} Column name of annotation file
+#' @param annotationMatch Column name of annotation file
 #' that maps to the column names of the count and tpm data sets (fastq
 #' file names with the suffixes removed including paired end identifiers
 #' if they exist). Default column name used is 'Sample'. Each row is a
 #' sample library and the columns are the  annotation information
-#' @param mergeAnnotation \code{logical} If TRUE add annotation information
+#' @param mergeAnnotation If TRUE add annotation information
 #' contained in a .csv file in RAW_ANNOTATIONS directory.
 #' @return \code{list} list containing the count, tpm, feature, and
 #' annotation data. list names are counts, tpms, featureData, annoData.
@@ -1859,3 +1880,24 @@ mergeData <- function(annotationMatch=NULL, mergeAnnotation=TRUE) {
     return(list(counts=count, tpms=tpm, featureData=fd, annoData=cd))
 
 } ## end mergeData
+
+
+#' Obtain directory path for configuration variable.
+#' 
+#' @param directory configuration label
+#' 
+getDir <- function(directory) {
+  
+  ns <- getNamespace("RNASeqPipelineR")
+  config <- get("rnaseqpipeliner_configuration", ns)
+  if(length(config) == 0) {
+    stop("Configuration not found: Have you run loadProject or buildReference (for Utils directory)?")
+  }
+  
+  if(!(directory %in% names(config$subdirs))) {
+     stop(paste(directory, "not found in configuration"))
+  }
+  
+  return(config$subdirs[directory])
+} ## end getDir
+

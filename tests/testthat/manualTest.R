@@ -6,6 +6,46 @@ library(RNASeqPipelineR)
 library(data.table)
 library(Biobase)
 
+
+
+## manually check that the read values match between the generated read
+## count table and the original FASTQ file.
+testSummation <- function(counts=count_eset, prefix=tmp) {
+  
+  PREFIX <- prefix 
+  
+  dat <- exprs(count_eset)
+  
+  rsem <- read.table(paste0(PREFIX, "/test/RSEM/test1Aligned.toTranscriptome.out.genes.results"), sep="\t", header=TRUE, row.names=NULL)
+  counts <- rsem[,c("gene_id", "expected_count")]
+  
+  annoFile <- RNASeqPipelineR:::ucschg38Table
+  syms <- as.character(unique(annoFile$hg38.kgXref.geneSymbol))
+  
+  tol = .Machine$double.eps ^ 0.5
+  
+  for(g in syms) {
+    
+    ids <- unique(annoFile[annoFile$hg38.kgXref.geneSymbol==g,]$hg38.knownIsoforms.clusterId)
+    read <- dat[rownames(dat)==g,1]
+    
+    rDat <- 0
+    for(id in ids) {
+       rDat <- rDat + counts[counts$gene_id==id,]$expected_count
+    }
+    
+    if(rDat - read > tol) {
+      cat(g, ": ",rDat, " ", read, "\n")
+    }
+    
+    rDat - read  > tol
+    
+  } ## end for g
+  
+} ## end testSummation
+
+
+
 ##source("/home/cmurie/cmurie_working/git/RNASeqPipelineR/R/RNASeqPipelineR.R")
 
 ## local instance of reference genome
@@ -50,39 +90,38 @@ unlink(tmp, recursive=TRUE, force=TRUE)
 testSummation(count_eset, tmp)
 
 
-## manually check that the read values match between the generated read
-## count table and the original FASTQ file.
-testSummation <- function(counts=count_eset, prefix=tmp) {
-  
-  PREFIX <- prefix 
-  
-  dat <- exprs(count_eset)
-  
-  rsem <- read.table(paste0(PREFIX, "/test/RSEM/test1Aligned.toTranscriptome.out.genes.results"), sep="\t", header=TRUE, row.names=NULL)
-  counts <- rsem[,c("gene_id", "expected_count")]
-  
-  annoFile <- RNASeqPipelineR:::ucschg38Table
-  syms <- as.character(unique(annoFile$hg38.kgXref.geneSymbol))
-  
-  tol = .Machine$double.eps ^ 0.5
-  
-  for(g in syms) {
-    
-    ids <- unique(annoFile[annoFile$hg38.kgXref.geneSymbol==g,]$hg38.knownIsoforms.clusterId)
-    read <- dat[rownames(dat)==g,1]
-    
-    rDat <- 0
-    for(id in ids) {
-       rDat <- rDat + counts[counts$gene_id==id,]$expected_count
-    }
-    
-    if(rDat - read > tol) {
-      cat(g, ": ",rDat, " ", read, "\n")
-    }
-    
-    rDat - read  > tol
-    
-  } ## end for g
-  
-} ## end testSummation
+######################################################################################
+################### test kallisto pseudo-alignment ###################################
+######################################################################################
+
+## local instance of reference genome
+utils_dir <- "/shared/silo_researcher/Gottardo_R/10_ref_files/Reference_Genome/Homo_sapiens/UCSC/hg38/kallisto/"
+
+## get temp directory for project creation
+tmp <- tempdir()
+
+createProject(project_name = "test", path=tmp, load_from_immport = FALSE)
+loadProject(project_dir=tmp, name="test")
+
+## load test fastq files stored in extdata
+## contains test1_R1.fastq, test1_R2.fastq, test2_R1.fastq, test2_R2.fastq,
+fpath <- system.file("extdata", "testData.zip", package="RNASeqPipelineR")
+unzip(zipfile=fpath, exdir=paste0(tmp, "/test/FASTQ/"))
+fpath2 <-  system.file("extdata", "testPheno.csv", package="RNASeqPipelineR")
+file.copy(from=fpath2, to=paste0(tmp, "/test/RAW_ANNOTATIONS/anno.csv"))
+
+## reference should already be built. test this function separately
+buildTranscriptIndexKallisto(path=utils_dir,
+                             fasta_file="hg38.transcripts.fa",
+                             name="hg38.idx",
+                             force=TRUE)
+
+alignKallisto(kallisto_threads=1, paired=TRUE, 
+              hours_requested=1, slurm=TRUE, slurm_partition=NULL,
+               ram_per_node=4000, force=FALSE,
+               paired_pattern=c("_R1.fastq", "_R2.fastq"))
+
+
+
+
 

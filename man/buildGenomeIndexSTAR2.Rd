@@ -18,7 +18,7 @@ buildGenomeIndexSTAR2(path = NULL, gtf_file = "", fasta_file = NULL,
 
 \item{name}{\code{character} the name of the genome output.}
 
-\item{gff3}{\code{boolean} when gtf_file is gff3 format set it to TRUE to add "--sjdbGTFtagExonParentTranscript gene".}
+\item{gff3}{\code{logical} when gtf_file is gff3 format set it to TRUE to add "--sjdbGTFtagExonParentTranscript gene".}
 
 \item{additional_param}{\code{character} default "".  Additional parameters to pass.}
 }

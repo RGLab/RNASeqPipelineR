@@ -23,7 +23,8 @@ Imports:
     annotate,
     Biobase,
     utils,
-    stats
+    stats,
+    biomaRt
 Suggests:
     clue,
     pander

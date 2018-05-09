@@ -7,13 +7,13 @@
 mergeData(annotationMatch = NULL, mergeAnnotation = TRUE)
 }
 \arguments{
-\item{annotationMatch}{\code{character} Column name of annotation file
+\item{annotationMatch}{Column name of annotation file
 that maps to the column names of the count and tpm data sets (fastq
 file names with the suffixes removed including paired end identifiers
 if they exist). Default column name used is 'Sample'. Each row is a
 sample library and the columns are the  annotation information}
 
-\item{mergeAnnotation}{\code{logical} If TRUE add annotation information
+\item{mergeAnnotation}{If TRUE add annotation information
 contained in a .csv file in RAW_ANNOTATIONS directory.}
 }
 \value{
