@@ -95,7 +95,7 @@ testSummation(count_eset, tmp)
 ######################################################################################
 
 ## local instance of reference genome
-utils_dir <- "/shared/silo_researcher/Gottardo_R/10_ref_files/Reference_Genome/Homo_sapiens/UCSC/hg38/kallisto/"
+utils_dir <- "/shared/silo_researcher/Gottardo_R/10_ref_files/Reference_Genome/Homo_sapiens/Ensembl/kallisto/"
 
 ## get temp directory for project creation
 tmp <- tempdir()
@@ -109,6 +109,23 @@ fpath <- system.file("extdata", "testData.zip", package="RNASeqPipelineR")
 unzip(zipfile=fpath, exdir=paste0(tmp, "/test/FASTQ/"))
 fpath2 <-  system.file("extdata", "testPheno.csv", package="RNASeqPipelineR")
 file.copy(from=fpath2, to=paste0(tmp, "/test/RAW_ANNOTATIONS/anno.csv"))
+
+setGenomeReference(utils_dir, "GRCH38_R91.idx")
+
+kallistoBuildTranscriptIndex(path=utils_dir,
+                             fasta_file="Homo_sapiens.GRCh38.cdna.all.fa",
+                             name="GRCH38_R91.idx", force=FALSE)
+
+kallistoAlign(kallisto_threads=3, paired=TRUE, mail="cmurie@fredhutch.org",
+              minutes_requested=10, slurm=TRUE, slurm_partition=NULL,
+              force=TRUE,
+              paired_pattern=c("_R1.fastq", "_R2.fastq"))
+
+runFastQC(ncores=2)
+kallistoAssembleOutput(paired=TRUE)
+kallistoReadQC()
+kallistoAssembleQC(paired=TRUE, doAnnotation=TRUE) 
+
 
 ## reference should already be built. test this function separately
 buildTranscriptIndexKallisto(path=utils_dir,
@@ -124,4 +141,4 @@ alignKallisto(kallisto_threads=1, paired=TRUE,
 
 
 
-
+unlink(tmp, recursive=TRUE, force=TRUE)
