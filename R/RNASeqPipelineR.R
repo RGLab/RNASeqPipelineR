@@ -18,6 +18,7 @@
 #' @import stats
 #' @import Biobase
 #' @import biomaRt
+#' @import parallel
 NULL
 
 ## silence complaints about variables not found in calls that use non-standard evaluation
@@ -550,31 +551,37 @@ stripExtension <- function(finame, pattern='([.][A-Za-z]+$)'){
 
 #' Perform FastQC quality control
 #' 
-#' Runs fastqc quality control on the FASTQ files
+#' Runs fastqc quality control on the FASTQ files. Parallel processing is run using fastqc
+#' internal threading (-t option). Each thread requires 250MB of memory.
 #' 
-#' Produces FASTQC reports for each FASTQ file using fastqc
-#' FASTQ input files must have extension \code{fastqc} (capitalization sensitive).
+#' Produces FASTQC reports for each FASTQ file using fastqc. FASTQ input files must have 
+#' extension \code{fastqc} or \code{fq} (capitalization sensitive). FASTQC output will be
+#' written to FASTQC directory.
+#' 
+#' @param ncores \code{integer} how many threads to use. Must be less than or equal to number
+#' of cores on machine.
 #' @export
-#' @param ncores \code{integer} how many threads to use
-runFastQC <- function(ncores=8){
-  fastQCout <- list.files(getConfig()[["subdirs"]][["FASTQC"]])
-  stripFQC <- unique(stripExtension(fastQCout, '(_fastqc.*$)')) #expanded fastqc generates at least 3 files per input
-  FQfile <- list.files(getConfig()[["subdirs"]][["FASTQ"]], pattern="*.fastq", ignore.case=TRUE, full.names=TRUE)
+runFastQC <- function(ncores=4){
+  
+  ## make sure we have enough threads to run locally
+  avail_cores <- parallel::detectCores()
+  if(ncores > avail_cores){
+    stop(paste(ncores, "cores required but only", avail_cores, " cores found on local machine"))
+  }
+  
+  fastQCout <- list.files(getDir("FASTQC"))
+  stripFQC <- unique(stripExtension(fastQCout, '\\.(fastq|fq)_fastqc.*$')) #expanded fastqc generates at least 3 files per input
+  FQfile <- list.files(getConfig()[["subdirs"]][["FASTQ"]], pattern="*\\.(fastq|fq)$", ignore.case=TRUE, full.names=TRUE)
   FQfile <- data.frame(file=FQfile, done=stripExtension(basename(FQfile)) %in% stripFQC, stringsAsFactors=FALSE)
   notrun <- FQfile[!FQfile$done,]
-  run_command <-  paste0('parallel -j ', ncores,
-                         ' fastqc {} -o "',getConfig()[['subdirs']][['FASTQC']],
-                         '" -q ::: "', paste(notrun$file, collapse='" "'), '"')
+  run_command <- paste0("fastqc -o ", getDir("FASTQC"), " --extract -t ", ncores, " ",
+                 noquote(paste(notrun$file, sep="", collapse=" ")))
+  
   if(nrow(notrun) > 0){
       message('Running fastqc process on ', nrow(notrun), ' files.')
     out<-system(run_command)
     if(out==0){
       message("Finished fastqc process for ", nrow(notrun), " files.")
-      message("Expanding archives")
-      f<-list.files(pattern="zip$",path=getConfig()[["subdirs"]][["FASTQC"]])
-      sapply(f,function(x){
-        out<-system(paste0(paste0("cd ",getConfig()[["subdirs"]][["FASTQC"]]),"&& unzip -o ",x),intern=FALSE,ignore.stdout=TRUE,ignore.stderr=FALSE,wait=TRUE)
-      })
       if(any(out!=0)){
         warning("encountered an error unzipping fastqc reports")
       }
@@ -1885,19 +1892,19 @@ mergeData <- function(annotationMatch=NULL, mergeAnnotation=TRUE) {
 #' Obtain directory path for configuration variable.
 #' 
 #' @param directory configuration label
-#' 
+#'
 getDir <- function(directory) {
-  
+
   ns <- getNamespace("RNASeqPipelineR")
   config <- get("rnaseqpipeliner_configuration", ns)
   if(length(config) == 0) {
     stop("Configuration not found: Have you run loadProject or buildReference (for Utils directory)?")
   }
-  
+
   if(!(directory %in% names(config$subdirs))) {
      stop(paste(directory, "not found in configuration"))
   }
-  
+
   return(config$subdirs[directory])
 } ## end getDir
 

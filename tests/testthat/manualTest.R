@@ -117,7 +117,7 @@ kallistoBuildTranscriptIndex(path=utils_dir,
                              name="GRCH38_R91.idx", force=FALSE)
 
 kallistoAlign(kallisto_threads=3, paired=TRUE, mail="cmurie@fredhutch.org",
-              minutes_requested=10, slurm=TRUE, slurm_partition=NULL,
+              minutes_requested=5, slurm=TRUE, slurm_partition=NULL,
               force=TRUE,
               paired_pattern=c("_R1.fastq", "_R2.fastq"))
 
@@ -125,20 +125,6 @@ runFastQC(ncores=2)
 kallistoAssembleOutput(paired=TRUE)
 kallistoReadQC()
 kallistoAssembleQC(paired=TRUE, doAnnotation=TRUE) 
-
-
-## reference should already be built. test this function separately
-buildTranscriptIndexKallisto(path=utils_dir,
-                             fasta_file="hg38.transcripts.fa",
-                             name="hg38.idx",
-                             force=TRUE)
-
-alignKallisto(kallisto_threads=1, paired=TRUE, 
-              hours_requested=1, slurm=TRUE, slurm_partition=NULL,
-               ram_per_node=4000, force=FALSE,
-               paired_pattern=c("_R1.fastq", "_R2.fastq"))
-
-
 
 
 unlink(tmp, recursive=TRUE, force=TRUE)
