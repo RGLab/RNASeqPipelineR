@@ -574,6 +574,7 @@ runFastQC <- function(ncores=4){
   FQfile <- list.files(getConfig()[["subdirs"]][["FASTQ"]], pattern="*\\.(fastq|fq)$", ignore.case=TRUE, full.names=TRUE)
   FQfile <- data.frame(file=FQfile, done=stripExtension(basename(FQfile)) %in% stripFQC, stringsAsFactors=FALSE)
   notrun <- FQfile[!FQfile$done,]
+  
   run_command <- paste0("fastqc -o ", getDir("FASTQC"), " --extract -t ", ncores, " ",
                  noquote(paste(notrun$file, sep="", collapse=" ")))
   
@@ -749,11 +750,16 @@ buildGenomeIndexSTAR2 = function (path = NULL, gtf_file = "", fasta_file = NULL,
 #' @param fromBAM \code{logical} if \code{TRUE} then RSEM will attempt to use previously aligned BAM files, in the \code{BAM} directory, rather than fastq files. The file names expected to end with \code{.transcript.bam}. See RSEM documentation for the format these files must obey.
 #' @param fromSTAR \code{logical} if \code{TRUE} then RSEM will use the
 #' STAR notation for the BAM files
-#' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
+#' @note The amount of memory requested should be set to bowtie_threads*parallel_threads*1G 
+#' as this is the default requested by samtools for sorting. If insufficient memory is 
+#' requested, the bam files will not be created successfully.
+#' @param mail email address to send failure message to, if desired.
 #' @export
 RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=FALSE, frag_mean=NULL, frag_sd=NULL,
-                                    nchunks=10,days_requested=5,slurm=FALSE, slurm_partition=NULL, #slurm_partition="gottardo_r",
-                                    ram_per_node=bowtie_threads*parallel_threads*1200, fromBAM=FALSE, fromSTAR=FALSE){
+                                    nchunks=10,days_requested=5,slurm=FALSE, 
+                                    slurm_partition=NULL, #slurm_partition="gottardo_r",
+                                    ram_per_node=bowtie_threads*parallel_threads*1200, 
+                                    fromBAM=FALSE, fromSTAR=FALSE, mail=NULL){
   ncores<-parallel_threads*bowtie_threads
   if(ncores>parallel::detectCores()&!slurm){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
@@ -793,6 +799,14 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
   keep <- outer(keep, extension, paste0)
   ## Write slurm preamble to a shell script
   if(slurm){
+    
+    ## set up email section if email address is given
+    mail_string <- mail_address <- ""
+    if(!is.null(mail)){
+      mail_string <- "#SBATCH --mail-type=FAIL"
+      mail_address <- paste0("#SBATCH --mail-user=", mail)
+    }
+    
     con<-file(file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"),open = "w")
     ram_requested<-parallel_threads*ram_per_node
     writeLines(c("#!/bin/bash",
@@ -803,13 +817,17 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
                  paste0("#SBATCH --mem=",ram_requested," # Memory pool for all cores (see also --mem-per-cpu)"),
                  paste0("#SBATCH -o ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.out")," # File to which STDOUT will be written"),
                  paste0("#SBATCH -e ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"rsem_%a.err"), " # File to which STDERR will be written"),
-                 'module add bowtie2'),con=con)
+                 mail_string,
+                 mail_address,
+                 'module add bowtie2'),
+               con=con)
     argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_${SLURM_ARRAY_TASK_ID}.txt")
   } else{
     #If we aren't using slurm, set the number of chunks to one.
     nchunks<-1
     argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt")
-  }
+  } ## end if slurm
+  
   if(!paired){
     #get file names, commandline for single-end
     # keep<-paste0(keep,".fastq")
@@ -824,7 +842,7 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
     } else{
       command<-paste0("cd ",rsem_dir," && parallel -j ",parallel_threads," rsem-calculate-expression --bowtie2 -p ", bowtie_threads," {} ",file.path(reference_genome_path,reference_genome_name)," {/.} :::: ", argumentFile)
     }
-  }else{
+  } else {
     #get file names, commandline for Paired end
     fastq_files<-file.path(fastq_dir,sort(keep))
     if(!is.null(frag_mean) || !is.null(frag_sd)){

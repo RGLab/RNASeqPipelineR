@@ -420,7 +420,7 @@ kallistoAssembleQC <- function(paired=TRUE, doAnnotation=TRUE,
       pheno <- read.csv(phenoFile, stringsAsFactors=FALSE)
       
       if(!phenoMatchLabel %in% colnames(pheno)) {
-        stop(paste(phenoMatchLabel, "not found in ", basename(phenoFile)))
+        stop(paste(phenoMatchLabel, " column not found in ", basename(phenoFile)))
       }
       
       allQC <- merge(pheno, allQC, by.x=phenoMatchLabel, by.y="Sample")
