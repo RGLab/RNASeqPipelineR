@@ -1533,67 +1533,84 @@ buildGenomeIndexSTAR = function (path = NULL, gtf_file = "", fasta_file = NULL, 
 #' @param parallel_threads  specify how many parallel processes to spawn
 #' @param star_threads  specify how many threads star should use.
 #' @param paired  specify whether you have paried reads or not.
-#' @param paired_pattern  specify the suffix of the paried-end fastq file names.
+#' @param force force STAR to align all FASTQ files
+#' @param paired_pattern  specify the suffix of the paired-end fastq file names. If not 
+#' paired then use only a single suffix.
 #' @param fastqPath specify path to FASTQ files if different than default
 #' @export
-AlignmentSTAR <- function(parallel_threads=1, star_threads=6, paired=TRUE,
+AlignmentSTAR <- function(parallel_threads=1, star_threads=1, paired=TRUE, force=FALSE,
                           paired_pattern=c("_1.fastq", "_2.fastq"), fastqPath=""){
   
   ncores<-parallel_threads*star_threads
   if(ncores>parallel::detectCores()){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
   }
-  .chunkDataFrame<-function(df=pairs){
-    groupsize<-nrow(df)
-    split(as.data.frame(df),gl(1,groupsize,length=nrow(df)))
-  }
+
   star_dir <- getConfig()[["subdirs"]][["BAM"]]
   done <- stringr::str_replace(list.files(path = star_dir, pattern = "\\Aligned.toTranscriptome.out.bam$"), "Aligned.toTranscriptome.out.bam", "")
 
-  ## read fastq files from user inputted directory or use default
   fastq_dir <- ifelse(fastqPath=="",  getConfig()[["subdirs"]][["FASTQ"]], fastqPath)
   if(!file.exists(fastq_dir)) {
-      stop(paste(fastq_dir, "doesn't exist\n"))
+    stop(paste(fastq_dir, "doesn't exist\n"))
   }
-
+  
+  ## get names of fastq files
+  orig <- list.files(fastq_dir, pattern="fastq|fq")
+  
   ## check that there are fastq files in directory
-  fileys <- list.files(path=fastq_dir,pattern="\\.fastq$")
-  if(length(fileys) == 0) {
-       stop(paste("No fastq files found in", fastq_dir))
+  if(length(orig) == 0) {
+    stop(paste("No fastq files found in", fastq_dir))
   }
-
-  if(paired){
-    todo <- unique(stringr::str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), paired_pattern, ''))
-  }else{
-    todo <- unique(stringr::str_replace(list.files(path=fastq_dir,pattern="\\.fastq$"), "\\.fastq$", ''))
-  }
-  extension <- if(paired) paired_pattern else '.fastq'
-  keep <- setdiff(todo, done)
-  if(length(keep)==0){
-    message("Expression already calculated")
-    return()
-  }
-  index <- file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/")
-  keep <- outer(keep, extension, paste0)
-  argumentFile <- file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt")
+  
+  ## extract sample names without suffix
+  sufLength <- nchar(paired_pattern[1])
+  sampleNames <- unique(substr(orig, start=1, stop=nchar(orig) - (sufLength)))
+ 
+  ## obtain names of fastq files that have not been aligned.
+  keep <- sampleNames
+  if(!force) {
+    keep <- setdiff(sampleNames, done)
+    if(length(keep)==0){
+      message("All FASTQ files already aligned. Use 'force=TRUE' to force realignment")
+      return()
+    }
+  } ## end if force
+  
+  index <-  file.path(getConfig()[["subdirs"]][["Utils"]], "Reference_Genome/")
+ 
   if(!paired){
-    #get file names, commandline for single-end
-    myfiles<-cbind(file.path(fastq_dir,keep), gsub(".fastq", "",keep))
-    command<-paste0("cd ",star_dir," && parallel -n 2 -j ",parallel_threads," STAR --runThreadN ", star_threads, " --outFileNamePrefix {2} --genomeDir ", index, " --readFilesIn {1} --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM :::: ", argumentFile)
-  }else{
-    #get file names, commandline for Paired end
-    fastq_files<-file.path(fastq_dir,sort(keep))
-    pairs<-matrix(fastq_files,ncol=2,byrow=TRUE)
-    myfiles<-cbind(pairs,gsub(paired_pattern[1], "", basename(pairs[,1])))
-    command<-paste0("cd ",star_dir," && parallel -n 3 -j ",parallel_threads," STAR --runThreadN ", star_threads, " --outFileNamePrefix {3} --genomeDir ", index, " --readFilesIn {1} {2} --outSAMtype BAM SortedByCoordinate --outReadsUnmapped Fastx --quantMode TranscriptomeSAM :::: ", argumentFile)
-  }
-  ## for both, divide split the files into chunks (maybe just 1) and write the argument chunks
-  chunked<-.chunkDataFrame(data.frame(files=myfiles))
-  con2=file(file.path(getConfig()[["subdirs"]][["FASTQ"]], "arguments_chunk_1.txt"))
-  writeLines(t(chunked[[1]]),con=con2)
-  close(con2)
-  cat(command)
-  system(command)
+    
+    ## run STAR for all fastq files on workstation
+    runSTAR <- function(fastqName, f_dir=fastq_dir, r_path=index,
+                        s_threads=star_threads, s_dir=star_dir,
+                        p_pattern=paired_pattern, paired=TRUE) {
+      
+      starCommand<-paste0("cd ", s_dir," && STAR --runThreadN ", star_threads, 
+                          " --outFileNamePrefix", fastqName, " --genomeDir ", r_path, 
+                          " --readFilesIn", f_dir, "/", fastqName, p_pattern[1],
+          " --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM")
+       system(starCommand)
+    } ## end runSTAR
+    
+  } else {
+    
+    ## run STAR for all fastq files on workstation
+    runSTAR <- function(fastqName, f_dir=fastq_dir, r_path=index,
+                            s_threads=star_threads, s_dir=star_dir,
+                            p_pattern=paired_pattern) {
+      
+      starCommand <- paste0("cd ", s_dir, " && STAR --runThreadN ", star_threads, 
+                             " --outFileNamePrefix ", fastqName, " --genomeDir ", r_path, 
+                             " --readFilesIn ", f_dir, "/", fastqName, p_pattern[1], 
+                              " ", f_dir, "/", fastqName, p_pattern[2], 
+ " --outSAMtype BAM SortedByCoordinate --outReadsUnmapped Fastx --quantMode TranscriptomeSAM")
+      
+       system(starCommand)
+     } ## end runSTAR
+   } ## end if !paired
+ 
+    nothing <- mclapply(keep, runSTAR, mc.cores=parallel_threads)
+    
 }
 
 
