@@ -2,38 +2,43 @@
 % Please edit documentation in R/RNASeq_kallisto.R
 \name{kallistoAlign}
 \alias{kallistoAlign}
-\title{Use the Kallisto tool to align the reads}
+\title{Use the Kallisto tool to align and quantify RNASeq FASTQ files.}
 \usage{
 kallistoAlign(kallisto_threads = 3, paired = TRUE, minutes_requested = 10,
-  slurm = TRUE, slurm_partition = NULL, force = FALSE,
-  paired_pattern = c("_1.fastq", "_2.fastq"), fastqPath = "", mail = NULL)
+  slurm = TRUE, parallel_threads = 1, slurm_partition = NULL,
+  force = FALSE, paired_pattern = c("_1.fastq", "_2.fastq"),
+  fastqPath = "", mail = NULL)
 }
 \arguments{
 \item{kallisto_threads}{specify how many threads kallisto 
 should use. This will be input as the '-t' parameter in the kallisto command.
 Default is 3 as the majority of gizmo nodes have 4 processors.}
 
-\item{paired}{\code{logical} specify whether you have paired reads or not.}
+\item{paired}{specify whether you have paired reads or not.}
 
-\item{minutes_requested}{\code{integer} number of minutes requested for the job 
+\item{minutes_requested}{number of minutes requested for the job 
 (when submitting a slurm job). Generally kallisto takes less than 5 minutes to 
 complete. Scicomp recommended 10m. Ignored if slurm = FALSE}
 
-\item{slurm}{\code{logical} if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run on the local machine. Slurm jobs will honour the nchunks and days_requested arguments.}
+\item{slurm}{if \code{TRUE} job is submitted as a slurm batch job, otherwise it's run 
+on the local machine. Slurm jobs will honour the nchunks and minutes_requested arguments.}
 
-\item{slurm_partition}{\code{character} the slurm partition to submit to. Defaults
+\item{parallel_threads}{Number of threads to run concurrent kallisto jobs if not using 
+SLURM. Total number of threads required are parallel_threads*(kallisto_threads+1).}
+
+\item{slurm_partition}{the slurm partition to submit to. Defaults
 to campus.Ignored if slurm=FALSE}
 
-\item{force}{\code{logical} If TRUE then align all FASTQ files else only align those
+\item{force}{If TRUE then align all FASTQ files else only align those
 files that have not been aligned. If force is FALSE then only fastq files without
 a directory in the Kallisto directory will be aligned.}
 
-\item{paired_pattern}{\code{character} specify the suffix of the paired-end fastq 
+\item{paired_pattern}{specify the suffix of the paired-end fastq 
 file names. Each suffix must be of the same length.}
 
-\item{fastqPath}{\code{character} specify path to FASTQ files if different than default}
+\item{fastqPath}{specify path to FASTQ files if different than default (FASTQ directory)}
 
-\item{mail}{\code{character} email address to send failure message to to, if desired.}
+\item{mail}{email address to send failure message to, if desired.}
 }
 \description{
 Uses Kallisto to pseudo-align reads in FASTQ files against the reference genome 
@@ -42,6 +47,6 @@ paired reads have different suffixes defined by 'paired_pattern' (i.e.
 sampleA_read_R1.fastq, sampleA_read_R2.fastq). Read 1 is assumed to be 
 upstream and read 2 is assumed to be downstream. FASTQ files must have the 
 suffix 'fastq' or fq'.
-The number of kallisto_threads should not be more than the number of cores 
-plus one available on your system.
+If running locally the number of available nodes should be at least the number of
+kallisto cores plus one times the number of parallel threads.
 }

@@ -18,5 +18,13 @@ kallistoBuildTranscriptIndex(path = NULL,
 \item{force}{if TRUE build index if it already exists else don't.}
 }
 \description{
+Implement kallisto alignment and quantification
+}
+\details{
+Methods to apply kallisto alignment and quantification to RNASeq data.
+
 Build transcript reference index for kallisto
+
+Build kallisto transcript reference if it is not already built. To force the build then
+set force to TRUE.
 }

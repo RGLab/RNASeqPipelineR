@@ -754,12 +754,14 @@ buildGenomeIndexSTAR2 = function (path = NULL, gtf_file = "", fasta_file = NULL,
 #' as this is the default requested by samtools for sorting. If insufficient memory is 
 #' requested, the bam files will not be created successfully.
 #' @param mail email address to send failure message to, if desired.
+#' @param force If TRUE then quantify all FASTQ/BAM files else only quantify those
+#'  files that have not been quantified. 
 #' @export
 RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=FALSE, frag_mean=NULL, frag_sd=NULL,
                                     nchunks=10,days_requested=5,slurm=FALSE, 
                                     slurm_partition=NULL, #slurm_partition="gottardo_r",
                                     ram_per_node=bowtie_threads*parallel_threads*1200, 
-                                    fromBAM=FALSE, fromSTAR=FALSE, mail=NULL){
+                                    fromBAM=FALSE, fromSTAR=FALSE, mail=NULL, force=FALSE){
   ncores<-parallel_threads*bowtie_threads
   if(ncores>parallel::detectCores()&!slurm){
     stop("The number of parallel_threads*bowite_threads is more than the number of cores detected by detectCores() on the local machine for non-slurm jobs")
@@ -789,14 +791,20 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
     todo <- stringr::str_replace(orig, 'Aligned.toTranscriptome.out.bam$', '')
     extension <- stringr::str_match(orig[1], 'Aligned.toTranscriptome.out.bam$')[1,1]
   }
-  keep <- setdiff(todo, done)
-  if(length(keep)==0){
-    message("Expression already calculated")
-    return()
+  
+  keep <- todo
+  if(!force) {
+      keep <- setdiff(todo, done)
+      if(length(keep)==0){
+        warning("Expression already calculated. Set force=TRUE to force quantification")
+        return()
+      }
   }
+  
   reference_genome_path <- file.path(getConfig()[["subdirs"]][["Utils"]],"Reference_Genome")
   reference_genome_name <- file.path(getConfig()[["reference_genome_name"]])
   keep <- outer(keep, extension, paste0)
+  
   ## Write slurm preamble to a shell script
   if(slurm){
     
@@ -873,9 +881,23 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
     slurm_command<-paste0("sbatch --array=1-",nchunks," ",file.path(getConfig()[["subdirs"]][["FASTQ"]],"batchSubmitJob.sh"))
     system(slurm_command)
   } else{
-    ## or just execute it
-    cat(command)
-    system(command)
+   
+    bamDir <- getDir("BAM")
+    runRSEM <- function(b_name, b_dir=bamDir) {
+      
+      bamOut <- tools::file_path_sans_ext(b_name)
+      
+      rsemCommand <- paste0("rsem-calculate-expression --no-bam-output --paired-end --bam ",
+                            file.path(b_dir, b_name), " ", 
+                            file.path(reference_genome_path, reference_genome_name), " ",
+                            bamOut)
+      system(rsemCommand)
+      
+    } ## end run RSEM
+    
+    setwd(rsem_dir)
+    nothing <- mclapply(keep, runRSEM, mc.cores=ncores)
+    
   }
 }
 
@@ -888,6 +910,7 @@ RSEMCalculateExpression <- function(parallel_threads=6,bowtie_threads=1,paired=F
 #' @param force \code{logical} rerun even if output exists
 #'@export 
 RSEMAssembleExpressionMatrix <- function(force=FALSE){
+  
   cond_eval <- length(list.files(getConfig()[["subdirs"]][["RSEM"]], pattern="rsem_"))<4
   if(cond_eval | force){
     message("Assembling counts matrix")

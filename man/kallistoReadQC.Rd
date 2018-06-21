@@ -2,8 +2,7 @@
 % Please edit documentation in R/RNASeq_kallisto.R
 \name{kallistoReadQC}
 \alias{kallistoReadQC}
-\title{Read kallisto error files and extract and write read count, aligned read count, and 
-estimated average length of reads.}
+\title{Assemble kallisto quality control information}
 \usage{
 kallistoReadQC(paired = TRUE)
 }
@@ -12,5 +11,6 @@ kallistoReadQC(paired = TRUE)
 TRUE.}
 }
 \description{
-Asemble kallisto qc data
+Read kallisto error files and extract and write read count, aligned read count, and 
+estimated average length of reads. Write 'kallisto_QC.csv' to OUTPUT directory.
 }

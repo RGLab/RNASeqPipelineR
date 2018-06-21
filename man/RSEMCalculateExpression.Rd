@@ -8,7 +8,7 @@ RSEMCalculateExpression(parallel_threads = 6, bowtie_threads = 1,
   paired = FALSE, frag_mean = NULL, frag_sd = NULL, nchunks = 10,
   days_requested = 5, slurm = FALSE, slurm_partition = NULL,
   ram_per_node = bowtie_threads * parallel_threads * 1200, fromBAM = FALSE,
-  fromSTAR = FALSE)
+  fromSTAR = FALSE, mail = NULL, force = FALSE)
 }
 \arguments{
 \item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}
@@ -35,6 +35,11 @@ RSEMCalculateExpression(parallel_threads = 6, bowtie_threads = 1,
 
 \item{fromSTAR}{\code{logical} if \code{TRUE} then RSEM will use the
 STAR notation for the BAM files}
+
+\item{mail}{email address to send failure message to, if desired.}
+
+\item{force}{If TRUE then quantify all FASTQ/BAM files else only quantify those
+files that have not been quantified.}
 }
 \description{
 Use the RSEM tool to annotate and quantify the reads
@@ -47,5 +52,7 @@ and read 2 is assumed to be downstream.
 The number of parallel_threads*bowtie_threads should not be more than the number of cores available on your system.
 }
 \note{
-The amount of memory requested should be set to bowtie_threads*parallel_threads*1G as this is the default requested by samtools for sorting. If insufficient memory is requested, the bam files will not be created successfully.
+The amount of memory requested should be set to bowtie_threads*parallel_threads*1G 
+as this is the default requested by samtools for sorting. If insufficient memory is 
+requested, the bam files will not be created successfully.
 }

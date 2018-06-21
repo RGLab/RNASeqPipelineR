@@ -2,18 +2,23 @@
 % Please edit documentation in R/RNASeq_kallisto.R
 \name{kallistoAssembleQC}
 \alias{kallistoAssembleQC}
-\title{Assemble kallisto and fastqc QC information and potentially combine with 
-annotation data.}
+\title{Collect kallisto and fastqc information.}
 \usage{
-kallistoAssembleQC(paired = TRUE, doAnnotation = TRUE)
+kallistoAssembleQC(paired = TRUE, doAnnotation = TRUE,
+  phenoMatchLabel = "Sample")
 }
 \arguments{
 \item{paired}{if TRUE then paired end data else single read data}
 
 \item{doAnnotation}{if TRUE then add annotation data to qc info. The 
 annotation file must be the sole .csv file in the RAW_ANNOTATIONS directory.}
+
+\item{phenoMatchLabel}{column name that contains the fastq file names without
+the paired suffix label in the annotation data. Used to match information between 
+the phenotype annotation file, kallisto QC, and FASTQC information. Defaults to 
+'Sample'. Not used if doAnnotation is FALSE.}
 }
 \description{
 Assemble kallisto and fastqc QC information and potentially combine with 
-annotation data.
+annotation data. Write 'kallisto_Pheno.csv' to OUTPUT directory.
 }

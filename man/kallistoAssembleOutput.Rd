@@ -2,9 +2,7 @@
 % Please edit documentation in R/RNASeq_kallisto.R
 \name{kallistoAssembleOutput}
 \alias{kallistoAssembleOutput}
-\title{Combine all count and tpm results from kallisto output into a single table. Also 
-read error files and extract read count, aligned read count, and estimated average
-length of reads.}
+\title{Assemble kallisto output into a single table.}
 \usage{
 kallistoAssembleOutput(paired = TRUE)
 }
@@ -15,5 +13,5 @@ TRUE.}
 \description{
 Combine all count and tpm results from kallisto output into a single table. Also 
 read error files and extract read count, aligned read count, and estimated average
-length of reads.
+length of reads. Write 'kallisto_counts.csv' and 'kallisto_tpm.csv' to OUTPUT directory.
 }

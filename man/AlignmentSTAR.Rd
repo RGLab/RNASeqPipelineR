@@ -4,8 +4,9 @@
 \alias{AlignmentSTAR}
 \title{Use the STAR tool to align the reads}
 \usage{
-AlignmentSTAR(parallel_threads = 1, star_threads = 6, paired = TRUE,
-  paired_pattern = c("_1.fastq", "_2.fastq"), fastqPath = "")
+AlignmentSTAR(parallel_threads = 1, star_threads = 1, paired = TRUE,
+  force = FALSE, paired_pattern = c("_1.fastq", "_2.fastq"),
+  fastqPath = "")
 }
 \arguments{
 \item{parallel_threads}{specify how many parallel processes to spawn}
@@ -14,7 +15,10 @@ AlignmentSTAR(parallel_threads = 1, star_threads = 6, paired = TRUE,
 
 \item{paired}{specify whether you have paried reads or not.}
 
-\item{paired_pattern}{specify the suffix of the paried-end fastq file names.}
+\item{force}{force STAR to align all FASTQ files}
+
+\item{paired_pattern}{specify the suffix of the paired-end fastq file names. If not 
+paired then use only a single suffix.}
 
 \item{fastqPath}{specify path to FASTQ files if different than default}
 }
