@@ -333,7 +333,7 @@ kallistoAssembleOutput <- function(paired=TRUE) {
                             mart = ensembl))
   
   countTranscripts <- merge(counts, genes, by.x="EnsemblIDs", by.y="ensembl_transcript_id", all.x=TRUE)
-  tpmTranscripts<-  merge(counts, genes, by.x="EnsemblIDs", by.y="ensembl_transcript_id", all.x=FALSE)
+  tpmTranscripts<-  merge(tpms, genes, by.x="EnsemblIDs", by.y="ensembl_transcript_id", all.x=FALSE)
   
   ## get list of ensembl_transcript_ids that do not exist in database.
   missingIDs <- countTranscripts[is.na(ensembl_gene_id),]
