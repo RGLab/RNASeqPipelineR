@@ -1440,7 +1440,7 @@ QualityControl <- function(paired=FALSE){
   ### alignment rate
   bam.dir <- getConfig()[["subdirs"]][["BAM"]]
   rsem.dir <- getConfig()[["subdirs"]][["RSEM"]]
-  starAlignSummary <- list.files(bam.dir, "Log.final.out$", full.names=TRUE, recursive=FALSE)
+  # starAlignSummary <- list.files(bam.dir, "Log.final.out$", full.names=TRUE, recursive=FALSE)
   rsemAlignSummary <- list.files(rsem.dir, ".cnt$", full.names=TRUE, recursive=TRUE)
   rsemFileNames <- gsub("Aligned.toTranscriptome.out.cnt", "", basename(rsemAlignSummary))
   starFileNames <- gsub("Log.final.out", "", basename(starAlignSummary))
@@ -1555,13 +1555,16 @@ buildGenomeIndexSTAR = function (path = NULL, gtf_file = "", fasta_file = NULL, 
 #' The number of parallel_threads*star_threads should not be more than the number of cores available on your system.
 #' @param parallel_threads  specify how many parallel processes to spawn
 #' @param star_threads  specify how many threads star should use.
+#' @param SJ_num argument for STAR parameter 'limitOutSJcollapsed' which is number of
+#' collapsed splice junctions allowed. Must be integer > 0
 #' @param paired  specify whether you have paried reads or not.
 #' @param force force STAR to align all FASTQ files
 #' @param paired_pattern  specify the suffix of the paired-end fastq file names. If not 
 #' paired then use only a single suffix.
 #' @param fastqPath specify path to FASTQ files if different than default
 #' @export
-AlignmentSTAR <- function(parallel_threads=1, star_threads=1, paired=TRUE, force=FALSE,
+AlignmentSTAR <- function(parallel_threads=1, star_threads=1, SJ_num=5000000, paired=TRUE, 
+                          force=FALSE,
                           paired_pattern=c("_1.fastq", "_2.fastq"), fastqPath=""){
   
   ncores<-parallel_threads*star_threads
@@ -1611,7 +1614,8 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=1, paired=TRUE, force
       starCommand<-paste0("cd ", s_dir," && STAR --runThreadN ", star_threads, 
                           " --outFileNamePrefix", fastqName, " --genomeDir ", r_path, 
                           " --readFilesIn", f_dir, "/", fastqName, p_pattern[1],
-          " --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM")
+          " --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM",
+          " --limitOutSJcollapsed ", SJ_num)
        system(starCommand)
     } ## end runSTAR
     
@@ -1626,7 +1630,8 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=1, paired=TRUE, force
                              " --outFileNamePrefix ", fastqName, " --genomeDir ", r_path, 
                              " --readFilesIn ", f_dir, "/", fastqName, p_pattern[1], 
                               " ", f_dir, "/", fastqName, p_pattern[2], 
- " --outSAMtype BAM SortedByCoordinate --outReadsUnmapped Fastx --quantMode TranscriptomeSAM")
+ " --outSAMtype BAM SortedByCoordinate --outReadsUnmapped Fastx --quantMode TranscriptomeSAM",
+ " --limitOutSJcollapsed ", format(SJ_num, scientific=FALSE))
       
        system(starCommand)
      } ## end runSTAR

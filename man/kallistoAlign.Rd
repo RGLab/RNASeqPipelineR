@@ -4,10 +4,11 @@
 \alias{kallistoAlign}
 \title{Use the Kallisto tool to align and quantify RNASeq FASTQ files.}
 \usage{
-kallistoAlign(kallisto_threads = 3, paired = TRUE, minutes_requested = 10,
-  slurm = TRUE, parallel_threads = 1, slurm_partition = NULL,
-  force = FALSE, paired_pattern = c("_1.fastq", "_2.fastq"),
-  fastqPath = "", mail = NULL)
+kallistoAlign(kallisto_threads = 3, paired = TRUE,
+  minutes_requested = 10, slurm = TRUE, parallel_threads = 1,
+  slurm_partition = NULL, force = FALSE,
+  paired_pattern = c("_1.fastq", "_2.fastq"), fastqPath = "",
+  mail = NULL)
 }
 \arguments{
 \item{kallisto_threads}{specify how many threads kallisto 

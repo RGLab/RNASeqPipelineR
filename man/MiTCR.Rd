@@ -4,8 +4,8 @@
 \alias{MiTCR}
 \title{Run MiTCR on each fastQ file}
 \usage{
-MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex", ncores = 1,
-  output_format = "text", paired = FALSE)
+MiTCR(gene = "TRB", species = NULL, ec = 2, pset = "flex",
+  ncores = 1, output_format = "text", paired = FALSE)
 }
 \arguments{
 \item{gene}{\code{character} c("TRB","TRA")}

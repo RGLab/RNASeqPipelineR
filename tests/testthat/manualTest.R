@@ -67,7 +67,7 @@ file.copy(from=fpath2, to=paste0(tmp, "/test/RAW_ANNOTATIONS/anno.csv"))
 ## reference should already be built. test this function separately
 buildReference(path=utils_dir, gtf_file="UCSCDec2016.gtf", fasta_file="hg38.fa", isoformsFile="UCSCKnownIsoformsDec2016.txt", doSTAR=TRUE, threads=6, name="hg38")
 
-AlignmentSTAR(parallel_threads=2, star_threads=2, paired=TRUE, paired_pattern=c("_R1.fastq", "_R2.fastq"))
+AlignmentSTAR(parallel_threads=1, star_threads=1, paired=TRUE, paired_pattern=c("_R1.fastq", "_R2.fastq"))
 RSEMCalculateExpression(parallel_threads=1,bowtie_threads=1,paired=TRUE, nchunks=1,slurm=FALSE, fromBAM=TRUE, fromSTAR=TRUE)
 RSEMAssembleExpressionMatrix(force=TRUE)
 ##BioCAnnotate("TxDb.Hsapiens.UCSC.hg38.knownGene",force = TRUE,lib = 'org.Hs.eg.db', na.rm=TRUE)

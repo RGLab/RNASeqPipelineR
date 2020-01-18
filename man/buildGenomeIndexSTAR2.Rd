@@ -5,7 +5,8 @@
 \title{Build a reference genome 2}
 \usage{
 buildGenomeIndexSTAR2(path = NULL, gtf_file = "", fasta_file = NULL,
-  star_threads = 1, name = NULL, gff3 = FALSE, additional_param = "")
+  star_threads = 1, name = NULL, gff3 = FALSE,
+  additional_param = "")
 }
 \arguments{
 \item{path}{\code{character} specifying an \emph{absolute path} path to the Utils directory.}

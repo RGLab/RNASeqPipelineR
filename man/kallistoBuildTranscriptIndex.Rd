@@ -5,8 +5,8 @@
 \title{kallisto methods}
 \usage{
 kallistoBuildTranscriptIndex(path = NULL,
-  fasta_file = "Homo_sapiens.GRCh38.cdna.all.fa", name = "GRCH38_R91.idx",
-  force = FALSE)
+  fasta_file = "Homo_sapiens.GRCh38.cdna.all.fa",
+  name = "GRCH38_R91.idx", force = FALSE)
 }
 \arguments{
 \item{path}{path to directory containing transcript fasta file}

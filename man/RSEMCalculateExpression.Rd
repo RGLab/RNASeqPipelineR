@@ -7,8 +7,8 @@
 RSEMCalculateExpression(parallel_threads = 6, bowtie_threads = 1,
   paired = FALSE, frag_mean = NULL, frag_sd = NULL, nchunks = 10,
   days_requested = 5, slurm = FALSE, slurm_partition = NULL,
-  ram_per_node = bowtie_threads * parallel_threads * 1200, fromBAM = FALSE,
-  fromSTAR = FALSE, mail = NULL, force = FALSE)
+  ram_per_node = bowtie_threads * parallel_threads * 1200,
+  fromBAM = FALSE, fromSTAR = FALSE, mail = NULL, force = FALSE)
 }
 \arguments{
 \item{parallel_threads}{\code{integer} specify how many parallel processes to spawn}

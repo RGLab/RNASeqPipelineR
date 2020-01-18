@@ -4,14 +4,17 @@
 \alias{AlignmentSTAR}
 \title{Use the STAR tool to align the reads}
 \usage{
-AlignmentSTAR(parallel_threads = 1, star_threads = 1, paired = TRUE,
-  force = FALSE, paired_pattern = c("_1.fastq", "_2.fastq"),
-  fastqPath = "")
+AlignmentSTAR(parallel_threads = 1, star_threads = 1, SJ_num = 5e+06,
+  paired = TRUE, force = FALSE, paired_pattern = c("_1.fastq",
+  "_2.fastq"), fastqPath = "")
 }
 \arguments{
 \item{parallel_threads}{specify how many parallel processes to spawn}
 
 \item{star_threads}{specify how many threads star should use.}
+
+\item{SJ_num}{argument for STAR parameter 'limitOutSJcollapsed' which is number of
+collapsed splice junctions allowed. Must be integer > 0}
 
 \item{paired}{specify whether you have paried reads or not.}
 
