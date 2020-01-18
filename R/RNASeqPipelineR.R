@@ -1615,7 +1615,7 @@ AlignmentSTAR <- function(parallel_threads=1, star_threads=1, SJ_num=5000000, pa
                           " --outFileNamePrefix", fastqName, " --genomeDir ", r_path, 
                           " --readFilesIn", f_dir, "/", fastqName, p_pattern[1],
           " --outSAMtype BAM SortedByCoordinate --quantMode TranscriptomeSAM",
-          " --limitOutSJcollapsed ", SJ_num)
+          " --limitOutSJcollapsed ", format(SJ_num, scientific=FALSE))
        system(starCommand)
     } ## end runSTAR
     
